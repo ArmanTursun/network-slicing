@@ -35,7 +35,7 @@ scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
-RUNS = 3
+RUNS = 2
 PROCESSES = 16 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
@@ -71,19 +71,19 @@ class RLEvaluator():
             "num_slices_env": all_scenarios[self.scenario]['n_embb']+all_scenarios[self.scenario]['n_mmtc'],
             "max_episode_length_env": 200, 
             # SPPO Safety parameters
-            "safety_threshold_h": -0.5,              # Tune
-            "neighborhood_radius_v": 0.5,            # Tune
-            "beta_t_sqrt_val": 1.0,                  # Tune
+            "safety_threshold_h": 0.1,                 # Tune
+            "neighborhood_radius_v": 0.5,               # Tune
+            "beta_t_sqrt_val": 1.96,                    ## Tune  1.0=68%, 1.645=90%, 1.96=95%, 2.576=99%
             "gp_length_scale": 0.7,       
             "gp_signal_variance": 1.0,    
-            "gp_noise_level": 0.05,
+            "gp_noise_level": 0.05,                     # How about tune noise level?
             "gp_num_inducing_points": 200,
-            "gp_init_num_inducing_points": 400,
+            "gp_init_num_inducing_points": 200,
             "gp_lr": 0.01,
-            "gp_iters": 10,                          # Tune
+            "gp_iters": 10,                             ## Tune
             "gp_init_iters": 500, 
-            "inducing_points_init_method": "kmeans", # "random_subset" or "kmeans" or provide tensor
-            "gp_training_batch_size": 512,           # Tune
+            "inducing_points_init_method": "random_subset",    ## "random_subset" or "kmeans" or provide tensor
+            "gp_training_batch_size": 1024,             ## Tune
             # PPO specific params
             "action_std_init": 0.6, 
             "lr_actor": 0.0005,   
@@ -102,7 +102,7 @@ class RLEvaluator():
         #random.shuffle(self.actions)
         self.t_actions = len(self.actions)
 
-        foldername = algo_name + '_m05_05_1_512_kmean_10'
+        foldername = algo_name + '_01_05_001'
         self.path = './results/scenario_{}/{}/'.format(scenario, foldername)
         if not os.path.isdir(self.path):
             try:

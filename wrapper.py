@@ -44,7 +44,7 @@ class ReportWrapper(gym.Wrapper):
         #self.actions = generate_random_actions(n_actions=self.t_actions, n_slices=self.n_slices, total_prbs=self.n_prbs)
         self.actions = actions
         if self.is_sppo:
-            self.safe_init_actions = self.select_balanced_high_sum_actions(tolerance = 8, top_k=config_dict["gp_num_inducing_points"])
+            self.safe_init_actions = self.select_balanced_high_sum_actions(tolerance = 8, top_k=config_dict["gp_init_num_inducing_points"])
             #self.init_safe_states, self.init_safe_values = self.get_initial_safe_set_H0(self.safe_threshold)
             print("safe action length: ", len(self.safe_init_actions))
         #print("safe states length: ", len(self.init_safe_states))

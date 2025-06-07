@@ -66,8 +66,8 @@ if __name__=='__main__':
     prbs = prbs_values[scenario]
 
     # subplot
-    fig, axs = plt.subplots(nrows=1, ncols=4, figsize=(16, 3.5), constrained_layout=True)
-
+    fig, axs = plt.subplots(nrows=1, ncols=4, figsize=(16, 4), constrained_layout=False)
+    fig.subplots_adjust(top=0.78)
     # iterate over algorithms
     for algo, label in zip(algo_names, labels):
         violations = np.empty([1])
@@ -132,57 +132,62 @@ if __name__=='__main__':
         # plot results
         steps = np.arange(len(actions_mean[0:SPAN]))
 
-        axs[2].set_title('Resource allocation')
-        axs[2].plot(steps, actions_mean[0:SPAN])
-        axs[2].fill_between(steps, actions_mean - actions_std, actions_mean + actions_std, alpha=0.3) # , color = '#DDDDDD'
+        axs[2].set_title('Resource allocation', fontsize=14)
+        axs[2].plot(steps, actions_mean[0:SPAN], label = label, linewidth = 2)
+        axs[2].fill_between(steps, actions_mean - actions_std, actions_mean + actions_std, alpha=0.3, label='_nolegend_') # , color = '#DDDDDD'
         #axs[2].fill_between(steps, actions_mean[0:SPAN] - 1.697 * actions_std[0:SPAN] / np.sqrt(runs), 
         #                actions_mean[0:SPAN] + 1.697 * actions_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
         if algo == algo_names[-1]:
             axs[2].set_ylim((0,prbs))
             axs[2].set_xlabel('Epoch')  # Add an x-label to the axes.
-            axs[2].set_ylabel('PRBs')
+            axs[2].set_ylabel('PRBs', fontsize=14)
             # axs[2].legend(loc='best')
             axs[2].grid()
 
-        axs[0].set_title('SLA violations')
-        axs[0].plot(steps, violations_mean[0:SPAN], label = label)
-        axs[0].fill_between(steps, violations_mean - violations_std, violations_mean + violations_std, alpha=0.3) #, color = '#DDDDDD'
+        axs[0].set_title('SLA violations', fontsize=14)
+        axs[0].plot(steps, violations_mean[0:SPAN], label = label, linewidth = 2)
+        axs[0].fill_between(steps, violations_mean - violations_std, violations_mean + violations_std, alpha=0.3, label='_nolegend_') #, color = '#DDDDDD'
         #axs[0].fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
         #                violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
         if algo == algo_names[-1]:
-            axs[0].set_xlabel('Epoch')  # Add an x-label to the axes.
-            axs[0].set_ylabel('SLA violations')
+            axs[0].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
+            axs[0].set_ylabel('SLA violations', fontsize=14)
             axs[3].set_ylim((0,3))
-            axs[0].legend(loc='best')
+            #axs[0].legend(loc='best')
             axs[0].grid()
         
-        axs[3].set_title('Rewards')
-        axs[3].plot(steps, rewards_mean[0:SPAN], label = label)
-        axs[3].fill_between(steps, rewards_mean - rewards_std, rewards_mean + rewards_std, alpha=0.3) # , color = '#DDDDDD'
+        axs[3].set_title('Rewards', fontsize=14)
+        axs[3].plot(steps, rewards_mean[0:SPAN], label = label, linewidth = 2)
+        axs[3].fill_between(steps, rewards_mean - rewards_std, rewards_mean + rewards_std, alpha=0.3, label='_nolegend_') # , color = '#DDDDDD'
         #axs[3].fill_between(steps, rewards_mean[0:SPAN] - 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), 
         #                rewards_mean[0:SPAN] + 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
         if algo == algo_names[-1]:
-            axs[3].set_xlabel('Epoch')  # Add an x-label to the axes.
-            axs[3].set_ylabel('Reward')
+            axs[3].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
+            axs[3].set_ylabel('Reward', fontsize=14)
             axs[3].set_ylim((-10,50)) # 15000
             #axs[3].legend(loc='best')
             axs[3].grid()
 
-        axs[1].set_title('Cumulative SLA violations')
-        axs[1].plot(steps, regret_mean[0:SPAN], label = label)
-        axs[1].fill_between(steps, regret_mean - regret_std, regret_mean + regret_std, alpha=0.3) # , color = '#DDDDDD'
+        axs[1].set_title('Cumulative SLA violations', fontsize=14)
+        axs[1].plot(steps, regret_mean[0:SPAN], label = label, linewidth = 2)
+        axs[1].fill_between(steps, regret_mean - regret_std, regret_mean + regret_std, alpha=0.3, label='_nolegend_') # , color = '#DDDDDD'
         #axs[1].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
         #                regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
         if algo == algo_names[-1]:
-            axs[1].set_xlabel('Epoch')  # Add an x-label to the axes.
-            axs[1].set_ylabel('cumulative SLA violations')
+            axs[1].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
+            axs[1].set_ylabel('cumulative SLA violations', fontsize=14)
             axs[1].set_ylim((0,4000)) # 15000
-            # axs[1].legend(loc='best')
+            #axs[1].legend(loc='best')
             axs[1].grid()        
         
-        if START > 0:
-            fig.savefig('./figures/_trained_subplots_{}.png'.format(scenario), format='png')
-        else:
-            # fig.savefig('./figures/subplots_{}.svg'.format(scenario), format='svg')
-            fig.savefig('./figures/subplots_{}.png'.format(scenario), format='png')
-        # fig.savefig('_subplots_' + scenario + '.svg', format='svg')       
+        if algo == algo_names[-1]:
+            # Create a single legend above all subplots
+            fig.legend(labels, loc='upper center', ncol=len(labels), bbox_to_anchor=(0.5, 1.0), frameon=True, fontsize=14)
+            fig.tight_layout(rect=[0, 0, 1, 0.9])
+
+            if START > 0:
+                fig.savefig('./figures/_trained_subplots_{}.png'.format(scenario), format='png')
+            else:
+                # fig.savefig('./figures/subplots_{}.svg'.format(scenario), format='svg')
+                fig.savefig('./figures/subplots_{}.png'.format(scenario), format='png')
+            # fig.savefig('_subplots_' + scenario + '.svg', format='svg')       

@@ -178,14 +178,14 @@ class GaussianProcessSafetyEstimatorGPyTorch: # Now using VariationalGP
 
         avg_loss_this_update = None
         if self.train_x_tensor.shape[0] > 0 and self.num_gp_opt_iters > 0:
-            # To handle potentially large datasets with SVGP, one might use mini-batches here.
+            # To handle potentially large datasets with SVGP, use mini-batches here.
             # For SPPO accumulating data and re-training, using the full dataset is common.
             losses_in_iters = []
 
             # Define a batch size for GP training
             # This batch_size is for the GP's own optimization loop, separate from PPO's buffer.
             # It should be small enough for efficiency but large enough for stable ELBO estimates.
-            gp_training_batch_size = min(self.gp_training_batch_size, self.train_x_tensor.shape[0]) # Example, tune this
+            gp_training_batch_size = min(self.gp_training_batch_size, self.train_x_tensor.shape[0])
 
             for i in range(self.num_gp_opt_iters):
                 # Sample a mini-batch from the full training data
