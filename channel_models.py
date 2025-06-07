@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
+@author: Arman
 
 Classes:
 
@@ -27,9 +27,9 @@ F = 9 # Noise Figure in dB
 radius = 1/2
 
 FILESNAMES = [
-    './datasets/fading_trace_EPA_3kmph.csv', 
-    './datasets/fading_trace_ETU_3kmph.csv', 
-    './datasets/fading_trace_EVA_60kmph.csv'
+    './datasets/fading_trace_EPA_3kmph.csv' 
+    #'./datasets/fading_trace_ETU_3kmph.csv' 
+    #'./datasets/fading_trace_EVA_60kmph.csv'
     ]
 
 def sigmoid(x, x0 = 0, k = 1):
@@ -163,10 +163,18 @@ class SINRSelectiveFading:
     def insert_user(self, user_id):
         fading_type = self.rng.integers(len(self.samples))
         n_samples = self.samples[fading_type].shape[1]
-        index = self.rng.integers(n_samples)
-        step = self.rng.choice([-1,1])
-        sinr = self.nominal_sinr.generate()
-        self.users[user_id] = {'fading_type': fading_type, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
+        while True:
+            index = self.rng.integers(n_samples)
+            step = self.rng.choice([0]) # stay still, if moving then [-1,1]
+            sinr = self.nominal_sinr.generate()
+            self.users[user_id] = {'fading_type': fading_type, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
+            f = self.users[user_id]['fading_type']
+            i = self.users[user_id]['index']
+            fading_vector = self.samples[f][:,i]
+            if round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) >= 10 and round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) <= 11: # set SINR to > 15dB
+                break
+        #print("SNR for UE_", user_id, ": ", round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])))
+        
         
     def get_snr(self, user_id):
         is_nan = True
@@ -179,7 +187,7 @@ class SINRSelectiveFading:
             # if limit is reached jump to a random location
             if self.users[user_id]['index'] >= self.users[user_id]['n_samples'] or self.users[user_id]['index'] < 0:
                 self.users[user_id]['index'] = self.rng.integers(self.users[user_id]['n_samples'])
-                self.users[user_id]['step'] = self.rng.choice([-1,1])        
+                self.users[user_id]['step'] = self.rng.choice([0]) # stay still, if moving then [-1,1]       
             
             f = self.users[user_id]['fading_type']
             i = self.users[user_id]['index']
@@ -309,6 +317,8 @@ class MCSCodeset:
             MIvalues = sigmoid(snr, *params)
             averageMI = np.mean(MIvalues)
             snr = inv_sigmoid(averageMI, *params)
+        else: # the UE measure average sinr for all prb
+            snr = snr[0]
         rx_prob = self.estimate_rx_prob(mcs, snr)
         return rx_prob
 
@@ -319,7 +329,7 @@ class MCSCodeset:
 if __name__ == '__main__':
 
     SAMPLES = 400
-    PRBS = 150
+    PRBS = 200
     SEED = 3547879
 
     rng = default_rng(seed = SEED)

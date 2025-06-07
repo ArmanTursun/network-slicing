@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Dec 3, 2021
+Created on June 3, 2025
 
-@author: juanjosealcaraz
+@author: Arman
 """
 
 import numpy as np
@@ -27,11 +27,11 @@ class ProportionalFair:
         '''
         # create auxiliary data structures
         n_ues = len(ues)
-        ue_rbs = np.zeros(n_ues, dtype = np.int)
-        ue_mcs = np.zeros(n_ues, dtype = np.int)
-        ue_queue = np.zeros(n_ues, dtype = np.int)
-        ue_rate = np.zeros(n_ues, dtype = np.int)
-        ue_bits = np.zeros(n_ues, dtype = np.int)
+        ue_rbs = np.zeros(n_ues, dtype = np.int32)
+        ue_mcs = np.zeros(n_ues, dtype = np.int32)
+        ue_queue = np.zeros(n_ues, dtype = np.int32)
+        ue_rate = np.zeros(n_ues, dtype = np.int32)
+        ue_bits = np.zeros(n_ues, dtype = np.int32)
         ue_th = np.zeros(n_ues)
 
         # extract ue information
@@ -69,7 +69,8 @@ class ProportionalFair:
             ue.prbs = prbs
             ue.bits = ue_bits[i]
             if prbs:
-                snr_values = ue.snr[prb_i: prb_i + prbs]
+                #snr_values = ue.snr[prb_i: prb_i + prbs]
+                snr_values = [ue.e_snr]
                 ue.p = self.mcs_codeset.response(ue_mcs[i], snr_values)
             else:
                 ue.p = 0

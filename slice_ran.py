@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
-
+@author: Arman
 Classes:
 
 UE
@@ -125,7 +124,7 @@ class SliceRANmMTC:
         self.slot_counter = 0
 
     def reset_state(self):
-        self.state = np.full((len(self.state_variables)), 0, dtype = np.float32)
+        self.state = np.full((len(self.state_variables)), 0, dtype = np.float64)
 
     def get_n_variables(self):
         return len(self.state_variables)
@@ -211,59 +210,67 @@ class SliceRANeMBB:
 
             if self.cbr_cac(): # check admission control
                 # generate new user
-                ue_id = next(self.user_counter)
-                cbr_source = CbrSource(bit_rate = self.cbr_bit_rate)
-                ue = UE(ue_id, self.id, cbr_source, CBR)
-                self.cbr_ues[ue_id] = ue
+                ue_list = []
+                for i in range(3):
+                    ue_id = next(self.user_counter)
+                    cbr_source = CbrSource(bit_rate = self.cbr_bit_rate)
+                    ue = UE(ue_id, self.id, cbr_source, CBR, window = self.slots_per_step)
+                    self.cbr_ues[ue_id] = ue
 
-                # generate holding time
-                holding_time = self.rng.exponential(self.cbr_mean_time)
-                holding_time = np.rint(holding_time / self.slot_length)
-                self.remaining_time[ue_id] = holding_time
+                    # generate holding time
+                    holding_time = self.rng.exponential(self.cbr_mean_time)
+                    holding_time = np.rint(holding_time / self.slot_length)
+                    self.remaining_time[ue_id] = holding_time
+                    ue_list.append(ue)
 
-                return [ue] # return user
-        else:
-            self.cbr_steps_next_arrival -= 1    
+                #return [ue] # return user
+                return ue_list 
+        #else:
+            #self.cbr_steps_next_arrival -= 1    
         return []
 
     def vbr_arrivals(self):
         if self.vbr_steps_next_arrival == 0:
             # create new vbr user
-            ue_id = next(self.user_counter)
-            vbr_source = VbrSource(**self.vbr_source_data)
-            ue = UE(ue_id, self.id, vbr_source, VBR)
-            self.vbr_ues[ue_id] = ue
+            ue_list = []
+            for i in range(2):
+                ue_id = next(self.user_counter)
+                vbr_source = VbrSource(**self.vbr_source_data)
+                ue = UE(ue_id, self.id, vbr_source, VBR)
+                self.vbr_ues[ue_id] = ue
 
-            # generate holding time
-            holding_time = self.rng.exponential(self.vbr_mean_time)
-            holding_time = np.rint(holding_time / self.slot_length)
-            self.remaining_time[ue_id] = holding_time
+                # generate holding time
+                holding_time = self.rng.exponential(self.vbr_mean_time)
+                holding_time = np.rint(holding_time / self.slot_length)
+                self.remaining_time[ue_id] = holding_time
 
-            # generate next arrival
-            inter_arrival_time = self.rng.exponential(1.0 / self.vbr_arrival_rate)
-            inter_arrival_time = np.rint(inter_arrival_time / self.slot_length)
-            self.vbr_steps_next_arrival = inter_arrival_time
-            return [ue]
+                # generate next arrival
+                inter_arrival_time = self.rng.exponential(1.0 / self.vbr_arrival_rate)
+                inter_arrival_time = np.rint(inter_arrival_time / self.slot_length)
+                self.vbr_steps_next_arrival = inter_arrival_time
+                ue_list.append(ue)
+            #return [ue]
+            return ue_list
         else:
-            self.vbr_steps_next_arrival -= 1
+        #    self.vbr_steps_next_arrival -= 1
             return []
 
     def departures(self):
         departures = []
         current_ids = list(self.remaining_time.keys())
         for id in current_ids:
-            self.remaining_time[id] -= 1
+            #self.remaining_time[id] -= 1
             if self.remaining_time[id] == 0:
                 departures.append(id)
                 del self.remaining_time[id] # delete timer
-                self.vbr_ues.pop(id, None) # delete ue if here
+                #self.vbr_ues.pop(id, None) # delete ue if here
                 self.cbr_ues.pop(id, None) # or here    
         return departures   
 
     def slot(self):
         self.slot_counter += 1
         arrivals = self.cbr_arrivals()
-        arrivals.extend(self.vbr_arrivals())
+        #arrivals.extend(self.vbr_arrivals())
         departures = self.departures()
         return arrivals, departures
 
@@ -273,7 +280,7 @@ class SliceRANeMBB:
         self.slot_counter = 0
 
     def reset_state(self):
-        self.state = np.full((len(self.state_variables)), 0, dtype = np.float32)
+        self.state = np.full((len(self.state_variables)), 0, dtype = np.float64)
     
     def update_info(self):
         queue = 0
@@ -308,14 +315,15 @@ class SliceRANeMBB:
         '''assesses SLA violations'''
         cbr_th = self.info['cbr_th']/self.observation_time > self.SLA['cbr_th']
         cbr_prb = self.info['cbr_prb']/self.slots_per_step > self.SLA['cbr_prb']
+        #print(self.info['cbr_traffic']/self.observation_time, self.info['cbr_th']/self.observation_time, self.info['cbr_prb']/self.slots_per_step)
         cbr_queue = self.info['cbr_queue']/self.slots_per_step < self.SLA['cbr_queue']
         vbr_th = self.info['vbr_th']/self.observation_time > self.SLA['vbr_th']
         vbr_prb = self.info['vbr_prb']/self.slots_per_step > self.SLA['vbr_prb']
         vbr_queue = self.info['vbr_queue']/self.slots_per_step < self.SLA['vbr_queue']
-        # the slice has to guarantee the objective delay for cbr and vbr if their traffics do not surpass the maximum
-        cbr_fulfilled = cbr_th or cbr_prb or cbr_queue 
-        vbr_fulfilled = vbr_th or vbr_prb or vbr_queue
-        SLA_fulfilled = cbr_fulfilled and vbr_fulfilled
+        # the slice has to guarantee the objective delay for cbr and vbr if their traffics do not surpass the maximum     
+        cbr_fulfilled = cbr_th #or cbr_prb or cbr_queue 
+        vbr_fulfilled = vbr_th #or vbr_prb or vbr_queue
+        SLA_fulfilled = cbr_fulfilled #and vbr_fulfilled
         return not(SLA_fulfilled)
 
     def get_state(self):

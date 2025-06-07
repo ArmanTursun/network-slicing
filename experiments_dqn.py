@@ -20,8 +20,8 @@ import os
 import concurrent.futures as cf
 from numpy.random import default_rng
 from scenario_creator import create_env
-from stable_baselines.common.cmd_util import make_vec_env
-from stable_baselines import DQN
+from stable_baselines3.common.cmd_util import make_vec_env
+from stable_baselines3 import DQN
 from wrapper import DQNWrapper
 
 SCENARIO = 3

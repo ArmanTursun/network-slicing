@@ -9,8 +9,8 @@ Created on December 13, 2021
 """
 
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 
 class RanSlice(gym.Env):
     ''' 
@@ -23,17 +23,19 @@ class RanSlice(gym.Env):
         self.n_slices = node_b.n_slices_l1
         self.n_variables = node_b.get_n_variables()
         self.action_space = spaces.Box(low=0, high = self.n_prbs,
-                                        shape=(self.n_slices,), dtype=np.int)
+                                        shape=(self.n_slices,), dtype=np.int32)
         self.observation_space = spaces.Box(low=-float('inf'), high=+float('inf'),
-                                            shape=(self.n_variables,), dtype=np.float)
+                                            shape=(self.n_variables,), dtype=np.float64)
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
         """
         Reset the environment 
         """
+        #if seed is not None:
+        #    self.seed(seed)
         state = self.node_b.reset()
 
-        return state # reward, done, info can't be included
+        return state, {} # reward, done, info can't be included
 
     def step(self, action):
         """
@@ -41,6 +43,7 @@ class RanSlice(gym.Env):
         :return: (np.ndarray, float, bool, dict) observation, reward, is the episode over?, additional information
         """
         # apply the action
+        #print('env action: ',action, "dtype:", action.dtype)
         state, info = self.node_b.step(action)
         total_violations = info['violations'].sum()
         info['total_violations'] = total_violations
@@ -51,7 +54,7 @@ class RanSlice(gym.Env):
             # if SLA fulfilled the reward is the amount of free resources
             reward = max(0, self.node_b.n_prbs - action.sum())
 
-        return state, float(reward), False, info
+        return state, float(reward), False, False, info
 
     def render(self):
         pass

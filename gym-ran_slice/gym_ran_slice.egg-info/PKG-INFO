@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: gym_ran_slice
+Version: 0.0.2
+Summary: Gym User Env - eMBB and MTC RAN slice simulator
+Author: Juan Jose Alcaraz, extend by Arman Tursun
+Author-email: juan.alcaraz@upct.es, armantursun@g.ecc.u-tokyo.ac.jp
+License: MIT License
+Requires-Dist: gymnasium
+Dynamic: author
+Dynamic: author-email
+Dynamic: license
+Dynamic: requires-dist
+Dynamic: summary

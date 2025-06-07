@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
+@author: Arman
 """
 import numpy as np
+#import gym_ran_slice
 
+# gNB class
 class NodeB():
     def __init__(self, slices_l1, slots_per_step, n_prbs, slot_length = 1e-3):
         self.slices_l1 = slices_l1
         self.n_slices_l1 = len(self.slices_l1)
         self.slots_per_step = slots_per_step
         self.n_prbs = n_prbs
+        self.ues = 0
         self.slot_length = slot_length
         self.reset()
 
@@ -38,7 +41,7 @@ class NodeB():
             slice_l1.slot()
 
     def get_state(self):
-        state = np.array([], dtype = np.float32)
+        state = np.array([], dtype = np.float64)
         for l1 in self.slices_l1:
             state = np.concatenate((state, l1.get_state()), axis=None)
         return state
@@ -50,8 +53,8 @@ class NodeB():
 
     def compute_reward(self):
         '''checks if the SLA is fulfilled for each slice'''
-        SLA_labels = np.zeros(self.n_slices_l1, dtype = np.int)
-        violations = np.zeros(self.n_slices_l1, dtype = np.int)
+        SLA_labels = np.zeros(self.n_slices_l1, dtype = np.int32)
+        violations = np.zeros(self.n_slices_l1, dtype = np.int32)
         for i, l1 in enumerate(self.slices_l1):
             SLA_labels[i], violations[i] = l1.compute_reward()
         return SLA_labels, violations
@@ -67,9 +70,11 @@ class NodeB():
             print('The action must contain as many elements as slices!')
             return self.get_state, self.get_info()
 
+        self.ues = 0
         # configure slices
         i_prb = 0
         for slice_l1, prbs in zip(self.slices_l1, action):
+            self.ues += len(slice_l1.ues)
             slice_l1.set_prbs(i_prb, prbs)
             i_prb += prbs
 

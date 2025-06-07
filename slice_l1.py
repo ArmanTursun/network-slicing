@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
+@author: Arman
 
 Classes:
 
@@ -51,7 +51,7 @@ class SliceL1mMTC:
         self.n_prbs = n_prbs
 
     def get_state(self):
-        state = np.array([], dtype = np.float32)
+        state = np.array([], dtype = np.float64)
         for slice_ran in self.slices_ran:
             state = np.concatenate((state, slice_ran.get_state()), axis=0) 
         return state
@@ -136,6 +136,7 @@ class SliceL1eMBB:
         self.prb_slice = slice(0,n_prbs)
         self.slices_ran = slices_ran
         self.scheduler = scheduler
+        self.ues = []
         self.reset()
 
     def set_prbs(self, i_prb, n_prbs):
@@ -143,7 +144,7 @@ class SliceL1eMBB:
         self.prb_slice = slice(i_prb, i_prb + n_prbs)
 
     def reset(self):
-        self.ues = []
+        #self.ues = []
         for slice_ran in self.slices_ran:
             slice_ran.reset()    
 
@@ -171,7 +172,7 @@ class SliceL1eMBB:
         return reward, violations
 
     def get_state(self):
-        state = np.array([], dtype = np.float32)
+        state = np.array([], dtype = np.float64)
         for slice_ran in self.slices_ran:
             state = np.concatenate((state, slice_ran.get_state()), axis=0) 
         return state
@@ -198,6 +199,7 @@ class SliceL1eMBB:
             self.add_users(arrivals)
 
         queued_data = 0
+        #snrs = []
         for ue in self.ues:
             # data arrival
             ue.traffic_step()
@@ -207,11 +209,13 @@ class SliceL1eMBB:
                 snr = self.snr_generator.get_snr(ue.id)
                 try:
                     ue.estimate_snr(snr[self.prb_slice])
+                    #snrs.append(ue.e_snr)
                 except:
                     print('problem with snr estimation!')
                     print('prb_slice = {}'.format(self.prb_slice))
                     print('snr vector = {}'.format(snr[self.prb_slice]))
-
+        #print(snrs)
+        #ps = []
         if queued_data > 0 and self.n_prbs > 0:
             # scheduling
             self.scheduler.allocate(self.ues, self.n_prbs)
@@ -221,8 +225,11 @@ class SliceL1eMBB:
                 received = False
                 if ue.prbs:
                     received = self.rng.random() < ue.p
+                    #print(ue.p)
+                    #received = True # asuume all data is succefully received
+                #ps.append(ue.p)
                 ue.transmission_step(received)
-
+        #print(ps)
         # update slice_ran info
         for slice_ran in self.slices_ran:
             slice_ran.update_info()

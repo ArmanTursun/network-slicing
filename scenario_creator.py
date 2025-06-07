@@ -1,103 +1,59 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
-
-Defines two functions:
+@author: Arman
 
 create_env
-create_kbrl_agent
 
 """
 
-import gym
+import gymnasium as gym
 from itertools import count
 from node_b import NodeB
 from slice_l1 import SliceL1eMBB, SliceL1mMTC
-from slice_ran import SliceRANmMTC, SliceRANeMBB
+from slice_ran_gbr import SliceRANmMTC, SliceRANeMBB
 from schedulers import ProportionalFair
-from channel_models import SINRSelectiveFading, MCSCodeset
+from channel_models import SINRSelectiveFading, MCSCodeset, SNRGenerator
 from kbrl_control import KBRL_Control, Learner
 from algorithms.kernel import GaussianKernel
 from algorithms.projectron import SVvariable, Projectron
 
 # ----------------- scenario parameters ------------------------
 
-scenario_1 = {
-    'n_prbs': 200,
-    'n_embb': 5,
-    'n_mmtc': 0
-}
-
-scenario_2 = {
-    'n_prbs': 150,
-    'n_embb': 3,
-    'n_mmtc': 2
-}
-
-scenario_3 = {
-    'n_prbs': 100,
-    'n_embb': 1,
-    'n_mmtc': 4
-}
-
-scenario_4 = {
-    'n_prbs': 70,
-    'n_embb': 1,
-    'n_mmtc': 1
-}
-
+scenario_1 = { 'n_prbs': 80, 'n_embb': 3, 'n_mmtc': 0}
+scenario_2 = { 'n_prbs': 150, 'n_embb': 3, 'n_mmtc': 2}
+scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
+scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
-
 
 # -------------------- eMBB parameters -------------------------
 
-CBR_description = {
+CBR_description = { # GBR traffic
 #    'lambda': 1.0/60.0, # low traffic
-    'lambda': 2.0/60.0,
-    't_mean': 30.0,
-    'bit_rate': 500000
+    'lambda': 2.0/60.0, # UE arrivals: Poisson process with arrival rate = 2 users / min
+    't_mean': 30.0, # UE connection time: Exponentially distributed with mean = 30 secs
+    'bit_rate': 1.5e6 # Bit Rate 0.5MB/s
 }
 
-VBR_description = {
-#    'lambda': 1.0/60.0, # low traffic
-    'lambda': 5.0/60.0,
-    't_mean': 30.0,
-    'p_size': 1000,
-    'b_size': 500,
-    'b_rate': 1
-}
-
-SLA_embb = {
-    'cbr_th': 10e6, 
-    'cbr_prb': 20, # 30
-    'cbr_queue': 10e4, # 5e4
-    'vbr_th': 15e6, # 10e6 
-    'vbr_prb': 30, # 40
-    'vbr_queue': 15e4
-    }
-
-state_variables_embb = ['cbr_traffic','cbr_th', 'cbr_prb', \
-                        'cbr_queue', 'cbr_snr', 'vbr_traffic', \
-                        'vbr_th', 'vbr_prb', 'vbr_queue', 'vbr_snr']
+state_variables_embb = ['cbr_traffic', 'cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr']
 
 # -------------------- mMTC parameters -------------------------
-
+# packet size 1000 bits
 MTC_description = {
-    'n_devices': 1000,
-    'repetition_set': [2,4,8,16,32,64,128],
-    'period_set': [1000, 50000, 10000, 15000, 20000, 25000, 50000, 100000]
+    'n_devices': 1000, # mmtc devices: 1000
+    'repetition_set': [2,4,8,16,32,64,128],  # Packet repetitions
+    'period_set': [1000, 50000, 10000, 15000, 20000, 25000, 50000, 100000] # transmission periods: seconds
 }
 
 state_variables_mmtc = ['devices', 'avg_rep', 'delay']
 
 SLA_mmtc = {
-    'delay': 300
+    'delay': 300 # Maximum per user delay: 300ms
 }
 
 # -------------------- create environment -------------------------
 
-def create_env(rng, n, slots_per_step = 50, propagation_type = 'macro_cell_urban_2GHz', L1_level = True, penalty = 100):
+def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propagation_type = 'macro_cell_urban_2GHz', L1_level = True, penalty = 100):
     '''
     Returns slice ran environment:
     - rng: for random number generation
@@ -105,24 +61,28 @@ def create_env(rng, n, slots_per_step = 50, propagation_type = 'macro_cell_urban
     '''
     time_per_step = slots_per_step * 1e-3
 
-    sc = scenarios[n]
+    sc = all_scenarios[n]
     n_prbs = sc['n_prbs']
     n_embb = sc['n_embb']
     n_mmtc = sc['n_mmtc']
 
+    SLA_embb = { # overall
+    'cbr_th': 3e6, # total throughput of slice ?
+    'cbr_prb': 20, # 30  GBR authorized capacity 20 RBs/subframe
+    'cbr_queue': 10e4, # 5e4 Maximum average queue per GBR user: 100Kbit/UE
+    'vbr_th': 10e4, # 10e6  # total throughput of slice ?
+    'vbr_prb': 30, # 40 non-GBR QoS compliant capacity 30RBs/subframe
+    'vbr_queue': 15e4 # Maximum average queue per non-GBR user: 150Kbit/UE
+    }
+
     # -------------------- eMBB normalization constants ----------------------
 
-    norm_const_embb = {
-        'cbr_traffic': 5e6 * time_per_step,
-        'cbr_th': 10e6 * time_per_step,
-        'cbr_prb': 25 * slots_per_step,
+    norm_const_embb = { # average in each step
+        'cbr_traffic': 4.5e6 * time_per_step,
+        'cbr_th': 4.5e6 * time_per_step,
+        'cbr_prb': n_prbs * slots_per_step,
         'cbr_queue': 10e4 * slots_per_step,
         'cbr_snr': 35 * slots_per_step,
-        'vbr_traffic': 5e6 * time_per_step, 
-        'vbr_th': 10e6 * time_per_step, 
-        'vbr_prb': 35 * slots_per_step, 
-        'vbr_queue': 10e4 * slots_per_step, 
-        'vbr_snr': 35 * slots_per_step
     }
 
     # -------------------- mMTC normalization constants -----------------------
@@ -139,7 +99,7 @@ def create_env(rng, n, slots_per_step = 50, propagation_type = 'macro_cell_urban
         return SliceRANmMTC(rng, id, SLA_mmtc, MTC_description, state_variables_mmtc, norm_const_mmtc, slots_per_step)
 
     def new_slice_embb(id, rng, user_counter):
-        return SliceRANeMBB(rng, user_counter, id, SLA_embb, CBR_description, VBR_description, state_variables_embb, norm_const_embb, slots_per_step)
+        return SliceRANeMBB(rng, user_counter, id, SLA_embb, CBR_description, state_variables_embb, norm_const_embb, slots_per_step)
 
     # ------------------- environment creation ------------------------
 
@@ -176,63 +136,8 @@ def create_env(rng, n, slots_per_step = 50, propagation_type = 'macro_cell_urban
             slice_l1_mmtc = SliceL1mMTC(5, slices_ran_mmtc)
             slices_l1.append(slice_l1_mmtc)
 
-    node = NodeB(slices_l1, slots_per_step, n_prbs)
+    node = NodeB(slices_l1, slots_per_step, n_prbs) # create gNB
 
     node_env = gym.make('gym_ran_slice:RanSlice-v1', node_b = node, penalty = penalty)
 
     return node_env
-
-# ------------ KBRL Learner initialization values ------------------
-
-alfa = 0.05 # learning parameter
-
-# initial offset and initial action are initialized at random
-embb_sec = (2, 8)
-embb_a = (4, 20)
-mmtc_sec = (1, 4)
-mmtc_a = (2, 10)
-
-# -------------------- create KBRL agent -------------------------
-
-def create_kbrl_agent(rng, n, accuracy_range = [0.99, 0.999]):
-    '''
-    Returns kbrl agent:
-    - rng: for random number generation
-    - n: selects the scenario (0, 1, 2)
-    - accuracy_range: for the learner
-    - budget: number of support vectors in memory
-    '''
-    sc = scenarios[n]
-    n_prbs = sc['n_prbs']
-    n_embb = sc['n_embb']
-    n_mmtc = sc['n_mmtc']
-    embb_dim = len(state_variables_embb)
-    mmtc_dim = len(state_variables_mmtc)
-
-    learners = [] 
-    i = 0
-
-    # create one learner instance per slice
-    for _ in range(n_embb):
-        sv = SVvariable() # create support vector memory
-        kernel = GaussianKernel(sv,1) # kernel
-        algorithm = Projectron(kernel) # online classifier
-        initial_action = rng.integers(embb_a[0], embb_a[1])
-        sec = rng.integers(embb_sec[0], embb_sec[1])
-        learner = Learner(algorithm, slice(i,i+embb_dim), initial_action, sec)
-        learners.append(learner)
-        i += embb_dim
-
-    for _ in range(n_mmtc):
-        sv = SVvariable()
-        kernel = GaussianKernel(sv,1)
-        algorithm = Projectron(kernel)
-        initial_action = rng.integers(mmtc_a[0], mmtc_a[1])
-        sec = rng.integers(mmtc_sec[0], mmtc_sec[1])
-        learner = Learner(algorithm, slice(i,i+mmtc_dim), initial_action, sec)
-        learners.append(learner)
-        i += mmtc_dim
-
-    kbrl_agent = KBRL_Control(learners, n_prbs, alfa = alfa, accuracy_range = accuracy_range)
-
-    return kbrl_agent
