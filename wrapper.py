@@ -25,7 +25,8 @@ class ReportWrapper(gym.Wrapper):
     this environment holds the history of the env variables
     - self.violation_history
     - self.reward_history
-    - self.action_history 
+    - self.action_history
+    - self.resettosafe_history 
     done = True if the number of steps is reached
     """
     def __init__(self, env, actions = None, steps = 2000, t_actions = 1000, #safe_threshold = 0.0,
@@ -74,16 +75,18 @@ class ReportWrapper(gym.Wrapper):
                 balanced_actions.append((idx, a, total))
 
         # Sort by sum in descending order
-        #balanced_actions.sort(key=lambda x: x[2], reverse=True)
+        balanced_actions.sort(key=lambda x: x[2], reverse=True)
+        balanced_actions = balanced_actions[:top_k]
         random.shuffle(balanced_actions)
 
         # Return top_k items: (original index, action)
-        return [(idx, a) for idx, a, _ in balanced_actions[:top_k]]
+        return [(idx, a) for idx, a, _ in balanced_actions]
     
     def reset_history(self):
         self.violation_history = np.zeros((self.steps), dtype = np.int16)
         self.reward_history = np.zeros((self.steps), dtype = np.float64)
         self.action_history = np.zeros((self.steps), dtype = np.int16)
+        self.resettosafe_history = np.zeros((self.steps), dtype = np.int16)
   
     def reset(self, *, seed=None, options=None):
         """
@@ -198,12 +201,14 @@ class ReportWrapper(gym.Wrapper):
         state, _, _, _, info = self.env.step(action)
         if self.verbose:
             print('Environment {} RESET to SAFE STATE'.format(self.env_id))
+        if self.step_counter-1 < self.steps:
+            self.resettosafe_history[self.step_counter-1] = 1
         return state, info
     
     def save_results(self):
         np.savez(self.file_path, violation = self.violation_history, 
                                 reward = self.reward_history,
-                                resources = self.action_history)
+                                resources = self.action_history, reset = self.resettosafe_history)
     
     def set_evaluation(self, eval_steps, new_path = None, change_name = False):
         self.step_counter = self.steps
@@ -211,6 +216,7 @@ class ReportWrapper(gym.Wrapper):
         self.violation_history = np.pad(self.violation_history, [(0, eval_steps)])
         self.reward_history = np.pad(self.reward_history, [(0, eval_steps)])
         self.action_history = np.pad(self.action_history, [(0, eval_steps)])
+        self.resettosafe_history = np.pad(self.resettosafe_history, [(0, eval_steps)])
         if new_path:
             self.path = new_path
         if change_name:

@@ -36,7 +36,7 @@ class KBRL_Control:
         self.security_factors = np.array([h.security_factor for h in learners], dtype = np.int16)        
         self.margins = np.array([0]*self.n_slices, dtype = np.int16)
         intial_value = (self.accuracy_range[0] + self.accuracy_range[1])/2
-        self.accuracies = np.full((self.n_slices, self.n_prbs), intial_value, dtype = float)
+        self.accuracies = np.full((self.n_slices, self.n_prbs), intial_value, dtype = np.float64)
 
     def select_action(self, state):
         action = np.zeros((self.n_slices), dtype = np.int16)
@@ -85,7 +85,7 @@ class KBRL_Control:
             _i_ = h.indexes
             l1_state = state[_i_]
             l1_action = action[i]
-            x = np.append(l1_state, l1_action/self.n_prbs)
+            x = np.append(l1_state, float(l1_action)/self.n_prbs)
             y_pred = algorithm.predict(x)
             y = reward[i]
             hit = y == y_pred
@@ -117,7 +117,7 @@ class KBRL_Control:
         action = self.action
 
         SLA_history = np.zeros((steps), dtype = np.int16)
-        reward_history = np.zeros((steps), dtype = np.float)
+        reward_history = np.zeros((steps), dtype = np.float64)
         violation_history = np.zeros((steps), dtype = np.int16)
         adjusted_actions = np.zeros((steps), dtype = np.int16)
         resources_history = np.zeros((steps), dtype = np.int16)
@@ -126,7 +126,7 @@ class KBRL_Control:
         state = system.reset()
 
         for i in range(steps):
-            new_state, reward, _, info = system.step(action)
+            new_state, reward, _, _, info = system.step(action)
             SLA_labels = info['SLA_labels']
             if learning_time < steps:
                 hits = self.update_control(state, action, SLA_labels)

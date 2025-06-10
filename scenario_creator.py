@@ -141,3 +141,58 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
     node_env = gym.make('gym_ran_slice:RanSlice-v1', node_b = node, penalty = penalty)
 
     return node_env
+
+# ------------ KBRL Learner initialization values ------------------
+
+alfa = 0.05 # learning parameter
+
+# initial offset and initial action are initialized at random
+embb_sec = (2, 8)
+embb_a = (4, 20)
+mmtc_sec = (1, 4)
+mmtc_a = (2, 10)
+
+# -------------------- create KBRL agent -------------------------
+
+def create_kbrl_agent(rng, n, accuracy_range = [0.99, 0.999]):
+    '''
+    Returns kbrl agent:
+    - rng: for random number generation
+    - n: selects the scenario (0, 1, 2)
+    - accuracy_range: for the learner
+    - budget: number of support vectors in memory
+    '''
+    sc = scenarios[n]
+    n_prbs = sc['n_prbs']
+    n_embb = sc['n_embb']
+    n_mmtc = sc['n_mmtc']
+    embb_dim = len(state_variables_embb)
+    mmtc_dim = len(state_variables_mmtc)
+
+    learners = [] 
+    i = 0
+
+    # create one learner instance per slice
+    for _ in range(n_embb):
+        sv = SVvariable() # create support vector memory
+        kernel = GaussianKernel(sv,1) # kernel
+        algorithm = Projectron(kernel) # online classifier
+        initial_action = rng.integers(embb_a[0], embb_a[1])
+        sec = rng.integers(embb_sec[0], embb_sec[1])
+        learner = Learner(algorithm, slice(i,i+embb_dim), initial_action, sec)
+        learners.append(learner)
+        i += embb_dim
+
+    for _ in range(n_mmtc):
+        sv = SVvariable()
+        kernel = GaussianKernel(sv,1)
+        algorithm = Projectron(kernel)
+        initial_action = rng.integers(mmtc_a[0], mmtc_a[1])
+        sec = rng.integers(mmtc_sec[0], mmtc_sec[1])
+        learner = Learner(algorithm, slice(i,i+mmtc_dim), initial_action, sec)
+        learners.append(learner)
+        i += mmtc_dim
+
+    kbrl_agent = KBRL_Control(learners, n_prbs, alfa = alfa, accuracy_range = accuracy_range)
+
+    return kbrl_agent

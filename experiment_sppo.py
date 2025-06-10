@@ -35,8 +35,8 @@ scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
-RUNS = 2
-PROCESSES = 16 # 30 if enough threads 
+RUNS = 3
+PROCESSES = 8 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
 PENALTY = 10
@@ -57,11 +57,21 @@ algorithms = {
     'SPPO': SPPO
 }
 
+safety_threshold_hs = {0.1: '01', 0.5: '05', -0.1: 'm01', -0.5: 'm05'}
+neighborhood_radius_vs = {0.1: '01', 0.5: '05', 0.8: '08'} # 
+gp_noise_leves = {0.01: '001'} # , 0.05: '005', 0.1: '01'
+beta_t_sqrt_vals = {1.0: '10', 1.96:'196', 2.5: '25'}
+
 class RLEvaluator():
-    def __init__(self, scenario, algo_name, algorithm):
+    def __init__(self, scenario, algo_name, algorithm, safety_params, radius_params, noise_params, beta_params):
         self.scenario = scenario
         self.algo_name = algo_name
         self.algorithm = algorithm
+
+        safety, safety_value = safety_params
+        radius, radius_value = radius_params
+        noise, noise_value = noise_params
+        beta, beta_value = beta_params
 
         self.config = {
         # Environment specific
@@ -71,19 +81,19 @@ class RLEvaluator():
             "num_slices_env": all_scenarios[self.scenario]['n_embb']+all_scenarios[self.scenario]['n_mmtc'],
             "max_episode_length_env": 200, 
             # SPPO Safety parameters
-            "safety_threshold_h": 0.1,                 # Tune
-            "neighborhood_radius_v": 0.5,               # Tune
-            "beta_t_sqrt_val": 1.96,                    ## Tune  1.0=68%, 1.645=90%, 1.96=95%, 2.576=99%
+            "safety_threshold_h": safety,                 # Tune
+            "neighborhood_radius_v": radius,               # Tune
+            "beta_t_sqrt_val": beta,                    ## Tune  1.0=68%, 1.645=90%, 1.96=95%, 2.576=99%
             "gp_length_scale": 0.7,       
             "gp_signal_variance": 1.0,    
-            "gp_noise_level": 0.05,                     # How about tune noise level?
+            "gp_noise_level": noise,                     # How about tune noise level?
             "gp_num_inducing_points": 200,
             "gp_init_num_inducing_points": 200,
             "gp_lr": 0.01,
-            "gp_iters": 10,                             ## Tune
+            "gp_iters": 10,                            
             "gp_init_iters": 500, 
             "inducing_points_init_method": "random_subset",    ## "random_subset" or "kmeans" or provide tensor
-            "gp_training_batch_size": 1024,             ## Tune
+            "gp_training_batch_size": 1024,             
             # PPO specific params
             "action_std_init": 0.6, 
             "lr_actor": 0.0005,   
@@ -102,7 +112,7 @@ class RLEvaluator():
         #random.shuffle(self.actions)
         self.t_actions = len(self.actions)
 
-        foldername = algo_name + '_01_05_001'
+        foldername = algo_name + '_' + safety_value + '_' + radius_value + '_' + noise_value + '_' + beta_value
         self.path = './results/scenario_{}/{}/'.format(scenario, foldername)
         if not os.path.isdir(self.path):
             try:
@@ -122,7 +132,7 @@ class RLEvaluator():
 
     
     def evaluate(self, i):
-        print('start evaluation of scenario {} run {} algorithm {}'.format(self.scenario, i, self.algo_name))
+        print('start evaluation of scenario {} algorithm {} with params: {}, {}, {}, {}, run {}'.format(self.scenario, self.algo_name, safety, radius, noise, beta, i))
         rng = default_rng(seed = i) # environment seed
         #set_random_seed(i) # tensorflow seed
         torch.manual_seed(i)
@@ -175,15 +185,25 @@ class RLEvaluator():
 
 if __name__=='__main__':
     for scenario, (alg_name, alg) in product(scenarios, algorithms.items()):
-        evaluator = RLEvaluator(scenario, alg_name, alg)
-        # ################################################################
-        # # use this code for sequential execution
-        for run in run_list:
-            evaluator.evaluate(run)
-        # ################################################################
+        for (noise, noise_value) in gp_noise_leves.items():
+            for (beta, beta_value) in beta_t_sqrt_vals.items():            
+                for (safety, safety_value) in safety_threshold_hs.items():
+                    for (radius, radius_value) in neighborhood_radius_vs.items():
+                        if radius == 0.5 and beta ==1.96:
+                            continue
+                        safety_params = (safety, safety_value)
+                        radius_params = (radius, radius_value)
+                        noise_params = (noise, noise_value)
+                        beta_params = (beta, beta_value)
+                        evaluator = RLEvaluator(scenario, alg_name, alg, safety_params, radius_params, noise_params, beta_params)
+                        # ################################################################
+                        # # use this code for sequential execution
+                        for run in run_list:
+                            evaluator.evaluate(run)
+                        # ################################################################
 
-        # ################################################################
-        # use this code for parallel execution
-        #with cf.ProcessPoolExecutor(PROCESSES) as E:
-            #results = E.map(evaluator.evaluate, run_list)
-        # ################################################################
+                        # ################################################################
+                        # use this code for parallel execution
+                        #with cf.ProcessPoolExecutor(PROCESSES) as E:
+                        #    results = E.map(evaluator.evaluate, run_list)
+                        # ################################################################
