@@ -128,7 +128,7 @@ class SliceL1eMBB:
     ''' 
     Layer 1 functionality for eMBB slices. It can multiplex several eMBB slices.
     '''
-    def __init__(self, rng, snr_generator, n_prbs, slices_ran, scheduler):
+    def __init__(self, rng, snr_generator, n_prbs, slices_ran, scheduler, l1sliceid = 0):
         self.type = 'eMBB'
         self.rng = rng
         self.snr_generator = snr_generator
@@ -137,6 +137,7 @@ class SliceL1eMBB:
         self.slices_ran = slices_ran
         self.scheduler = scheduler
         self.ues = []
+        self.id = l1sliceid
         self.reset()
 
     def set_prbs(self, i_prb, n_prbs):
@@ -178,7 +179,7 @@ class SliceL1eMBB:
         return state
 
     def get_info(self):
-        info = {i: slice_ran.info for i, slice_ran in enumerate(self.slices_ran)}
+        info = {self.id: slice_ran.info for i, slice_ran in enumerate(self.slices_ran)}
         return info
 
     def add_users(self, ue_list):
@@ -190,6 +191,11 @@ class SliceL1eMBB:
         for ue_id in ue_id_list:
             self.snr_generator.extract_user(ue_id)
         self.ues = [ue for ue in self.ues if ue.id not in ue_id_list]
+
+    def reset_ue_bits(self):
+        # reset bis of UE to 0
+        for ue in self.ues:
+            ue.bits = 0
 
     def slot(self):
         # generate arrivals and departures for each slice ran
@@ -219,7 +225,6 @@ class SliceL1eMBB:
         if queued_data > 0 and self.n_prbs > 0:
             # scheduling
             self.scheduler.allocate(self.ues, self.n_prbs)
-
             for ue in self.ues:
                 # transmission and ue update
                 received = False
@@ -231,5 +236,7 @@ class SliceL1eMBB:
                 ue.transmission_step(received)
         #print(ps)
         # update slice_ran info
+        #ue_bits = [ue.bits for ue in self.ues]
+        #print(ue_bits)
         for slice_ran in self.slices_ran:
             slice_ran.update_info()

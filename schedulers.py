@@ -61,7 +61,7 @@ class ProportionalFair:
 
             # update the estimated throughput with current allocation
             ue_th[index] = self.a * ue_th[index] + self.b * ue_bits[index] / self.slot_length
-    
+
         # update ues
         prb_i = 0
         for i, ue in enumerate(ues):

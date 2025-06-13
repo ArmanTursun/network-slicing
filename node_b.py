@@ -92,5 +92,8 @@ class NodeB():
         info = self.get_info(SLA_labels=SLA_labels, violations=violations)
 
         self.steps += 1
+        
+        for slice_l1 in self.slices_l1:
+            slice_l1.reset_ue_bits()
 
         return state, info

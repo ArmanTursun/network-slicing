@@ -173,6 +173,13 @@ class SINRSelectiveFading:
             fading_vector = self.samples[f][:,i]
             if round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) >= 10 and round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) <= 11: # set SINR to > 15dB
                 break
+        '''
+        index = self.rng.integers(n_samples)
+        step = self.rng.choice([0])
+        #step = self.rng.choice([-1,1])
+        sinr = self.nominal_sinr.generate()
+        self.users[user_id] = {'fading_type': fading_type, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
+        '''
         #print("SNR for UE_", user_id, ": ", round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])))
         
         
@@ -187,7 +194,8 @@ class SINRSelectiveFading:
             # if limit is reached jump to a random location
             if self.users[user_id]['index'] >= self.users[user_id]['n_samples'] or self.users[user_id]['index'] < 0:
                 self.users[user_id]['index'] = self.rng.integers(self.users[user_id]['n_samples'])
-                self.users[user_id]['step'] = self.rng.choice([0]) # stay still, if moving then [-1,1]       
+                self.users[user_id]['step'] = self.rng.choice([0]) # stay still, if moving then [-1,1]
+                #self.users[user_id]['step'] = self.rng.choice([-1,1]) # stay still, if moving then [-1,1]       
             
             f = self.users[user_id]['fading_type']
             i = self.users[user_id]['index']

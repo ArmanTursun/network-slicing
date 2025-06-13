@@ -109,12 +109,12 @@ if __name__=='__main__':
         evaluator = NAFEvaluator(scenario)
         # ################################################################
         # # use this code for sequential execution
-        # for run in run_list:
-        #     evaluator.evaluate(run)
+        for run in run_list:
+            evaluator.evaluate(run)
         # ################################################################
 
         # ################################################################
         # use this code for parallel execution
-        with cf.ProcessPoolExecutor(PROCESSES) as E:
-            results = E.map(evaluator.evaluate, run_list)
+        #with cf.ProcessPoolExecutor(PROCESSES) as E:
+        #    results = E.map(evaluator.evaluate, run_list)
         # ################################################################

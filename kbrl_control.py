@@ -6,6 +6,7 @@
 """
 
 import numpy as np
+import time
 
 DEBUG = True
 
@@ -124,12 +125,20 @@ class KBRL_Control:
         hits_history = np.zeros((len(action),steps), dtype = np.int16)
 
         state = system.reset()
-
+        state = state[0]
+        start = time.perf_counter()
         for i in range(steps):
+            
             new_state, reward, _, _, info = system.step(action)
             SLA_labels = info['SLA_labels']
             if learning_time < steps:
                 hits = self.update_control(state, action, SLA_labels)
+            
+            end = time.perf_counter()   
+            duration_ms = (end - start) * 1000
+            #print(info)
+            print(f"Step: {i:>5}, Action = {action}, Reward = {reward:>6}, Total violation = {info['total_violations']:>3}, Duration = {duration_ms:>5.1f}")
+            start = time.perf_counter()
             action, self.adjusted = self.select_action(new_state)
             state = new_state
 
@@ -139,6 +148,7 @@ class KBRL_Control:
             resources_history[i] = action.sum()
             adjusted_actions[i] = self.adjusted
             hits_history[:,i] = hits
+            
 
         print('mean resources = {}'.format(resources_history.mean()))
         print('total violations = {}'.format(violation_history.sum()))

@@ -321,6 +321,9 @@ class SPPO:
                 if self.is_sppo:
                     m_s_prime = actual_info_dict.get('safety_value_m_s_prime', 0.0)
                 violation_count += actual_info_dict.get('total_violations')
+
+                if not self.is_sppo and actual_info_dict.get('total_violations') > 0:
+                    terminated = True
                 
                 if self.verbose > 1 and current_total_timesteps_elapsed % 1 == 0 :
                     if self.is_sppo:

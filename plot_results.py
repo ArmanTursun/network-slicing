@@ -88,7 +88,7 @@ if __name__=='__main__':
     #print(algo_names)
     prbs = prbs_values[scenario]
 
-    save_path = './figures/new/subplots_{}_all_converge_n001_b1_wPPO'.format(scenario)
+    save_path = './figures/new/subplots_{}_wkblr'.format(scenario)
 
     # Generate distinct colors from a colormap
     color_list = plt.cm.tab10.colors  # up to 10 distinct colors; you can also use tab20, Set3, etc.

@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: juanjosealcaraz
+@author: armantursun
 
-This script evaluates the Kernel Model-Based RL (KBRL) algorithm in 3 network-slicing scenarios. 
-For each scenario, and each delta, the script launches 30 simulation runs. Each run lasts 50000 steps.
-
-The results of the K-th run of KBRL using accuracy factor (delta) 0.97, on scenario N, are stored in:
-
-./results/scenario_N/KBRL_97/results_K.npz
 
 """
 
@@ -17,16 +11,33 @@ from numpy import savez
 from numpy.random import default_rng
 from itertools import product
 import concurrent.futures as cf
-from scenario_creator import create_env, create_kbrl_agent
+from scenario_creator import create_env, create_qr_agent
 
 scenarios = [0] # ,1,2
-accuracy_list = [[0.97, 0.99]] # , [0.99, 0.999]
+quantile_list = [0.95] # , [0.99, 0.999] , 0.99
+
+# We define the SLA constraints for each slice type
+# For eMBB, let's assume a max delay constraint
+embb_sla = {'threshold': 1e6, 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Delay > 3e6
+
+# For mMTC, let's assume a minimum success rate constraint
+mmtc_sla = {'threshold': 0.99, 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Success Rate > 99%
 
 scenario_1 = { 'n_prbs': 80, 'n_embb': 3, 'n_mmtc': 0}
 scenario_2 = { 'n_prbs': 150, 'n_embb': 3, 'n_mmtc': 2}
 scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
+
+# --- Hyperparameters for the Learners ---
+# These can be tuned based on experiments
+QR_PARAMS = {
+    'learning_rate': 0.1,
+    'budget': 1000,               # Max number of support vectors to keep in memory
+    'gamma': 10,                 # Gamma for the Gaussian Kernel
+    'exploration_factor': 1,
+    'resource_cost_factor': 1
+}
 
 RUNS = 1
 PROCESSES = 8 # 30 if enough threads 
@@ -40,13 +51,13 @@ EPOCH = 10
 TRAIN_STEPS = STEPS_PER_UPDATE * EPOCH
 
 run_list = list(range(RUNS))
-name = 'KBRL'
+name = 'QR'
 
 class Evaluator():
-    def __init__(self, scenario, a_range):
+    def __init__(self, scenario, quantile):
         self.scenario = scenario
-        self.a_range = a_range
-        a = int(a_range[0]*100)
+        self.quantile = quantile
+        a = int(quantile*100)
         self.path = './results/scenario_{}/{}_{}/'.format(scenario, name, a)
         if not os.path.isdir(self.path):
             try:
@@ -60,17 +71,18 @@ class Evaluator():
         rng = default_rng(seed = i)
         node_env = create_env(rng, all_scenarios = all_scenarios, n = self.scenario, slots_per_step = SLOT_PER_STEP, penalty = PENALTY)
         print('run {}: Environment created!'.format(i))
-        kbrl_agent = create_kbrl_agent(rng, self.scenario, accuracy_range = self.a_range)
-        print('run {}: KBRL agent created'.format(i))
-        results = kbrl_agent.run(node_env, TRAIN_STEPS)
-        print('run {}: KBRL agent trained'.format(i))
+        qr_agent = create_qr_agent(rng, self.scenario, all_scenarios, quantile = self.quantile, 
+                                     embb_sla = embb_sla, mmtc_sla = mmtc_sla, qr_params = QR_PARAMS, slots_per_step = SLOT_PER_STEP )
+        print('run {}: QR agent created'.format(i))
+        results = qr_agent.run(node_env, TRAIN_STEPS)
+        print('run {}: QR agent trained'.format(i))
         file_path = '{}results_{}.npz'.format(self.path, i)
         savez(file_path, **results)
         print('run {}: Results saved!'.format(i))
 
 if __name__=='__main__':
-    for scenario, a_range in product(scenarios, accuracy_list):
-        evaluator = Evaluator(scenario, a_range)
+    for scenario, quantile in product(scenarios, quantile_list):
+        evaluator = Evaluator(scenario, quantile)
         # ################################################################
         # # use this code for sequential execution
         for run in run_list:

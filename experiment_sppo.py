@@ -17,7 +17,7 @@ from numpy.random import default_rng
 from itertools import product
 import concurrent.futures as cf
 from scenario_creator import create_env
-from wrapper import ReportWrapper
+from wrapper_sppo import ReportWrapper
 #from stable_baselines3 import PPO, SAC, A2C, TD3, DDPG
 from PPO_mini import PPO_mini
 from PPO_Safe import SPPO
@@ -54,13 +54,14 @@ MULPRB = 2
 algorithms = {
     #'PPO': SPPO
     #'PPO_mini': PPO_mini
-    'SPPO': SPPO
+    #'SPPO': SPPO
+    'PPO_term': SPPO
 }
-
-safety_threshold_hs = {0.1: '01', 0.5: '05', -0.1: 'm01', -0.5: 'm05'}
-neighborhood_radius_vs = {0.1: '01', 0.5: '05', 0.8: '08'} # 
+ 
+safety_threshold_hs = {0.1: '01'} # , 0.5: '05', -0.1: 'm01', -0.5: 'm05'
+neighborhood_radius_vs = {0.1: '01'} # , 0.5: '05', 0.8: '08'
 gp_noise_leves = {0.01: '001'} # , 0.05: '005', 0.1: '01'
-beta_t_sqrt_vals = {1.0: '10', 1.96:'196', 2.5: '25'}
+beta_t_sqrt_vals = {1.0: '10'} # , 1.96:'196', 2.5: '25'
 
 class RLEvaluator():
     def __init__(self, scenario, algo_name, algorithm, safety_params, radius_params, noise_params, beta_params):
@@ -104,7 +105,7 @@ class RLEvaluator():
             # Training loop params
             "total_timesteps": TRAIN_STEPS, # epochs * steps_per_epoch
             "steps_per_epoch_for_buffer": STEPS_PER_UPDATE, # steps in each epoch
-            "verbose_level": -2  # -1: GP, 0: wrapper, 1: sppo (epoch), 2: sppo (step)
+            "verbose_level": 0  # -1: GP, 0: wrapper, 1: sppo (epoch), 2: sppo (step)
         }
 
         self.actions = generate_combinations_sum_le(n_slices=all_scenarios[self.scenario]['n_embb']+all_scenarios[self.scenario]['n_mmtc'], 
@@ -149,7 +150,7 @@ class RLEvaluator():
         env = make_vec_env(lambda: node_env, n_envs=1)
         print('vectorised environment created')
         print('scenario {}: run {} of algorithm {} ... '.format(self.scenario, i, self.algo_name))
-        if self.algo_name == "SPPO" or self.algo_name == 'PPO':
+        if self.algo_name == "SPPO" or self.algo_name == 'PPO' or self.algo_name == 'PPO_term':
             model = self.algorithm(
                 env=env,
                 lr_actor=self.config["lr_actor"],
