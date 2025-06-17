@@ -1,6 +1,12 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+@author: ArmanTursun
+
+Learner and QR_control
+
+"""
 import numpy as np
-
-
 # This SV class
 # It's an efficient, circular buffer for storing support vectors and their coefficients.
 class SV:
@@ -16,6 +22,7 @@ class SV:
         Atomically adds a support vector and its coefficient at the current
         counter position, then increments the counter.
         """
+        """
         self.landmarks[self.counter, :] = x
         self.coeff[self.counter] = coeff_value
         
@@ -24,9 +31,25 @@ class SV:
             self.is_full = True
         #print(self.counter)
         self.counter = (self.counter + 1) % self.budget
+        """
+
+        if not self.is_full:
+            # Buffer is not full, just add to the next available slot
+            self.landmarks[self.counter, :] = x
+            self.coeff[self.counter] = coeff_value
+            self.counter += 1
+            if self.counter == self.budget:
+                self.is_full = True
+        else:
+            # Buffer is full. Find the index of the least important support vector.
+            # The importance is the absolute value of its alpha coefficient.
+            idx_to_replace = np.argmin(np.abs(self.coeff))
+            
+            # Replace the least important memory with the new one.
+            self.landmarks[idx_to_replace, :] = x
+            self.coeff[idx_to_replace] = coeff_value
 
 class SimpleGaussianKernel:
-    # This is also from your code, acting as a helper.
     def __init__(self, gamma = 1.0):
         self.gamma = gamma
 
@@ -35,23 +58,52 @@ class SimpleGaussianKernel:
             return np.array([])
         dist_sq = np.sum((landmarks - x)**2, axis=1)
         return np.exp(-self.gamma * dist_sq)
+    
+    def __call__(self, x, landmarks):
+        return self.k_vector(x, landmarks)
+
+class MaternKernel:
+    """Matérn kernel supporting ν = 0.5, 1.5, 2.5."""
+    def __init__(self, length_scale=1.0, nu=2.5):
+        assert nu in [0.5, 1.5, 2.5], "Only ν = 0.5, 1.5, 2.5 are supported"
+        self.length_scale = length_scale
+        self.nu = nu
+
+    def k_vector(self, x, landmarks):
+        if landmarks.shape[0] == 0:
+            return np.array([])
+
+        # Euclidean distances
+        dists = np.sqrt(np.sum((landmarks - x) ** 2, axis=1)) / self.length_scale
+
+        if self.nu == 0.5:
+            # Exponential kernel
+            return np.exp(-dists)
+
+        elif self.nu == 1.5:
+            sqrt3_d = np.sqrt(3) * dists
+            return (1 + sqrt3_d) * np.exp(-sqrt3_d)
+
+        elif self.nu == 2.5:
+            sqrt5_d = np.sqrt(5) * dists
+            return (1 + sqrt5_d + (5 / 3) * dists**2) * np.exp(-sqrt5_d)
+
+    def __call__(self, x, landmarks):
+        return self.k_vector(x, landmarks)
 
 # This is combined regressor class
 class KernelizedOnlineQuantileRegressor:
     '''
     Merges the SV architecture with the Quantile Regression learning rule.
     '''
-    def __init__(self, sv, kernel, quantile=0.95, learning_rate=0.01):
+    def __init__(self, sv, kernel, quantile=0.95, learning_rate=0.01, gradient_penalty = 10.0):
         self.sv = sv
         self.kernel = kernel
         self.quantile = quantile
         self.learning_rate = learning_rate
+        self.gradient_penalty = gradient_penalty
 
     def _get_prediction_and_uncertainty(self, x):
-        """
-        Makes a continuous prediction for the quantile.
-        This is the same core logic as your code, but we return the raw score 'f'.
-        """
         # Determine how many support vectors are active
         if self.sv.is_full:
             num_active_svs = self.sv.budget
@@ -65,7 +117,7 @@ class KernelizedOnlineQuantileRegressor:
         active_landmarks = self.sv.landmarks[:num_active_svs]
         active_coeffs = self.sv.coeff[:num_active_svs]
 
-        k = self.kernel.k_vector(x, active_landmarks)
+        k = self.kernel(x, active_landmarks)
         
         # This is the predicted quantile value
         prediction = k @ active_coeffs
@@ -88,7 +140,7 @@ class KernelizedOnlineQuantileRegressor:
         """
         return self._get_prediction_and_uncertainty(x)
     
-    def update(self, x, y_true):
+    def update(self, x, y_true, sla_threshold): # , sla_threshold
         """
         This is the new learning rule based on pinball loss.
         """
@@ -104,6 +156,10 @@ class KernelizedOnlineQuantileRegressor:
         else:
             # We over-predicted, apply a small push downwards
             gradient_update = -self.learning_rate * (1 - self.quantile)
-            
+
+        if y_true < sla_threshold and prediction >= sla_threshold :#or y_true >= sla_threshold and prediction < sla_threshold:
+            # If a violation occurred, amplify the entire gradient update
+            gradient_update *= self.gradient_penalty
+
         # Step 3: Add the new data point x as a support vector and set its coefficient
         self.sv.add_support_vector(x, gradient_update)

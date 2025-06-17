@@ -163,20 +163,26 @@ class SINRSelectiveFading:
     def insert_user(self, user_id):
         fading_type = self.rng.integers(len(self.samples))
         n_samples = self.samples[fading_type].shape[1]
+        
         while True:
             index = self.rng.integers(n_samples)
             step = self.rng.choice([0]) # stay still, if moving then [-1,1]
             sinr = self.nominal_sinr.generate()
-            self.users[user_id] = {'fading_type': fading_type, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
+            self.users[user_id] = {'fading_type': fading_type, 'original_index': index, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
             f = self.users[user_id]['fading_type']
             i = self.users[user_id]['index']
             fading_vector = self.samples[f][:,i]
-            if round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) >= 10 and round(np.mean(fading_vector + self.users[user_id]['nominal_sinr'])) <= 11: # set SINR to > 15dB
+            is_nan = np.isnan(np.sum(fading_vector))
+            if is_nan:
+                continue
+            mean_snr = round(np.mean(fading_vector + self.users[user_id]['nominal_sinr']))
+            if mean_snr >= 8 and mean_snr <= 16: # set SINR to > 15dB
                 break
+
         '''
         index = self.rng.integers(n_samples)
-        step = self.rng.choice([0])
-        #step = self.rng.choice([-1,1])
+        #step = self.rng.choice([0])
+        step = self.rng.choice([-1,1])
         sinr = self.nominal_sinr.generate()
         self.users[user_id] = {'fading_type': fading_type, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
         '''
@@ -190,12 +196,13 @@ class SINRSelectiveFading:
         while is_nan:
             # iterate one step
             self.users[user_id]['index'] += self.users[user_id]['step']
-
+            
             # if limit is reached jump to a random location
             if self.users[user_id]['index'] >= self.users[user_id]['n_samples'] or self.users[user_id]['index'] < 0:
-                self.users[user_id]['index'] = self.rng.integers(self.users[user_id]['n_samples'])
+                #self.users[user_id]['index'] = self.rng.integers(self.users[user_id]['n_samples'])
+                self.users[user_id]['index'] = self.users[user_id]['original_index']
                 self.users[user_id]['step'] = self.rng.choice([0]) # stay still, if moving then [-1,1]
-                #self.users[user_id]['step'] = self.rng.choice([-1,1]) # stay still, if moving then [-1,1]       
+                #self.users[user_id]['step'] *= -1      
             
             f = self.users[user_id]['fading_type']
             i = self.users[user_id]['index']
@@ -203,7 +210,6 @@ class SINRSelectiveFading:
             # Fading gain per RB
             fading_vector = self.samples[f][:,i]
             is_nan = np.isnan(np.sum(fading_vector))
-
         return fading_vector + self.users[user_id]['nominal_sinr'] # this is a column array
         
     def extract_user(self, user_id):
@@ -327,7 +333,9 @@ class MCSCodeset:
             snr = inv_sigmoid(averageMI, *params)
         else: # the UE measure average sinr for all prb
             snr = snr[0]
-        rx_prob = self.estimate_rx_prob(mcs, snr)
+        snr_noise = 0
+        #snr_noise = np.random.randint(-5, 6) # SNR suddenly change
+        rx_prob = self.estimate_rx_prob(mcs, snr + snr_noise)
         return rx_prob
 
     def nominal_rate(self, mcs):

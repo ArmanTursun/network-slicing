@@ -67,6 +67,9 @@ class ProportionalFair:
         for i, ue in enumerate(ues):
             prbs = ue_rbs[i]
             ue.prbs = prbs
+            #noise = np.random.uniform(-0.5, 0.5)
+            #ue.bits += ue.bits * noise
+            #ue.bits = np.clip(ue.bits + noise, 0.0, 1.0)
             ue.bits = ue_bits[i]
             if prbs:
                 #snr_values = ue.snr[prb_i: prb_i + prbs]

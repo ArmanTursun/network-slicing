@@ -42,6 +42,9 @@ class UE:
     def estimate_snr(self, snr):
         self.snr = snr
         self.e_snr = round(np.mean(snr))
+        snr_noise = 0
+        #snr_noise = np.random.randint(-5, 6) # SNR suddenly change
+        self.e_snr += snr_noise
 
     def traffic_step(self):
         self.new_bits = self.traffic_source.step()
@@ -165,7 +168,7 @@ class SliceRANeMBB:
 
         self.cbr_arrival_rate = CBR_description['lambda']
         self.cbr_mean_time = CBR_description['t_mean']
-        self.cbr_bit_rate = CBR_description['bit_rate']
+        self.cbr_bit_rate = CBR_description['bit_rate'][self.id]
 
         self.slot_counter = 0
         self.remaining_time = {}
@@ -186,12 +189,12 @@ class SliceRANeMBB:
 
     def cbr_cac(self):
         '''Admission control for CBR users'''
-        #slots = max(self.slot_counter,1)
-        #time = slots * self.slot_length
-        #cbr_prb = self.info['cbr_prb'] / slots
-        #cbr_th = self.info['cbr_th'] / time
-        #if cbr_prb >= self.SLA['cbr_prb'] or cbr_th >= self.SLA['cbr_th']:
-        #    return False
+        slots = max(self.slot_counter,1)
+        time = slots * self.slot_length
+        cbr_prb = sum(self.info['cbr_prb']) / len(self.info['cbr_prb']) / slots if len(self.info['cbr_prb']) > 0 else 0
+        cbr_th = sum(self.info['cbr_th']) / len(self.info['cbr_th']) / time if len(self.info['cbr_th']) > 0 else 0
+        if cbr_prb >= self.SLA['cbr_prb'] or cbr_th >= self.SLA['cbr_th'][self.id]:
+            return False
         return True
 
     def cbr_arrivals(self):
@@ -206,9 +209,10 @@ class SliceRANeMBB:
             if self.cbr_cac(): # check admission control
                 # generate new user
                 ue_list = []
-                for i in range(3): # 3 ues per slice
+                for i in range(1): # 3 ues per slice
                     ue_id = next(self.user_counter)
                     cbr_source = CbrSource(bit_rate = self.cbr_bit_rate)
+                    #print(self.cbr_bit_rate)
                     ue = UE(ue_id, self.id, cbr_source, CBR, window = self.slots_per_step)
                     self.cbr_ues[ue_id] = ue
 
@@ -222,20 +226,28 @@ class SliceRANeMBB:
 
                 #return [ue] # return user
                 return ue_list 
-        #else:
-            #self.cbr_steps_next_arrival -= 1    
+        else:
+            self.cbr_steps_next_arrival -= 1    
         return []
 
     def departures(self):
         departures = []
         current_ids = list(self.remaining_time.keys())
         for id in current_ids:
-            #self.remaining_time[id] -= 1 # assume ue does not leave
+            self.remaining_time[id] -= 1 # assume ue does not leave
             if self.remaining_time[id] == 0:
                 departures.append(id)
                 del self.remaining_time[id] # delete timer
-                self.cbr_ues.pop(id, None) # or here    
+                self.cbr_ues.pop(id, None) # or here  
+                self.del_ue_from_info(id)  
         return departures   
+
+    def del_ue_from_info(self, id):
+        for cur_info in self.info.keys():
+            if id in self.info[cur_info]:
+                self.info[cur_info].pop(id, None)
+            else:
+                print('ERROR: UE is not found in info')
 
     def slot(self):
         self.slot_counter += 1
@@ -260,16 +272,14 @@ class SliceRANeMBB:
         #n = 0
         for ue in self.cbr_ues.values(): # norm is total each step
             if ue.id not in self.info['cbr_traffic']:
-                self.info['cbr_traffic'][ue.id] = ue.new_bits / self.norm_const['cbr_traffic'] 
+                self.info['cbr_traffic'][ue.id] = ue.new_bits / self.norm_const['cbr_traffic'][self.id] 
             else:
-                self.info['cbr_traffic'][ue.id] += ue.new_bits / self.norm_const['cbr_traffic'] 
+                self.info['cbr_traffic'][ue.id] += ue.new_bits / self.norm_const['cbr_traffic'][self.id] 
             
-            #ue.bits += np.random.uniform(-ue.bits * 0.2, ue.bits * 0.2)
-            #ue.bits = np.clip(ue.bits + noise, 0.0, 1.0)
             if ue.id not in self.info['cbr_th']:
-                self.info['cbr_th'][ue.id] = ue.bits / self.norm_const['cbr_th']
+                self.info['cbr_th'][ue.id] = ue.bits / self.norm_const['cbr_th'][self.id]
             else:
-                self.info['cbr_th'][ue.id] += ue.bits / self.norm_const['cbr_th'] 
+                self.info['cbr_th'][ue.id] += ue.bits / self.norm_const['cbr_th'][self.id] 
             
             if ue.id not in self.info['cbr_prb']:
                 self.info['cbr_prb'][ue.id] = ue.prbs / self.norm_const['cbr_prb'] 
@@ -298,15 +308,15 @@ class SliceRANeMBB:
         prb_violation = 0
         queue_violation = 0
         for ue in self.info['cbr_th'].keys():
-            if self.info['cbr_th'][ue] < self.SLA['cbr_th']:
+            if self.info['cbr_th'][ue] < self.SLA['cbr_th'][self.id]:
                 th_violation += 1
         for ue in self.info['cbr_prb'].keys():
             if self.info['cbr_prb'][ue] < self.SLA['cbr_prb']:
                 prb_violation += 1
         for ue in self.info['cbr_queue'].keys():
-            if self.info['cbr_queue'][ue] < self.SLA['cbr_queue']:
+            if self.info['cbr_queue'][ue] > self.SLA['cbr_queue']:
                 queue_violation += 1
-        total_violation = th_violation #+ prb_violation + queue_violation
+        total_violation = th_violation #+ queue_violation #+ prb_violation
         #cbr_th = self.info['cbr_th'] >= self.SLA['cbr_th']
         #cbr_prb = self.info['cbr_prb'] > self.SLA['cbr_prb']
         #print(self.info['cbr_traffic']/self.observation_time, self.info['cbr_th']/self.observation_time, self.info['cbr_prb']/self.slots_per_step)
@@ -319,11 +329,13 @@ class SliceRANeMBB:
     def get_state(self):
         '''converts the info into a normalized vector'''
         for i, var in enumerate(self.state_variables):
-            if var == 'cbr_traffic':
-                self.state[i] = round(self.SLA['cbr_th'], 2)
-            else:
+            if var == 'cbr_traffic': # demand
+                self.state[i] = round(self.SLA['cbr_th'][self.id], 2)
+            elif var == 'cbr_ue': # minum throughput along ues
+                self.state[i] = round(len(self.cbr_ues) / self.norm_const['cbr_ue'], 2)
+            else: # average along ues
                 all_val = [self.info[var][ue] for ue in self.info[var].keys()]    
-                #avg_var = sum(all_val) / len(self.cbr_ues.values()) if len(self.cbr_ues.values()) > 0 else 0
+                #avg_val = sum(all_val) / len(self.cbr_ues.values()) if len(self.cbr_ues.values()) > 0 else 0
                 min_val = min(all_val) if all_val else 0
                 self.state[i] = round(min_val, 2)        
         return self.state

@@ -19,7 +19,6 @@ import concurrent.futures as cf
 from scenario_creator import create_env
 from wrapper_sppo import ReportWrapper
 #from stable_baselines3 import PPO, SAC, A2C, TD3, DDPG
-from PPO_mini import PPO_mini
 from PPO_Safe import SPPO
 from stable_baselines3.common.env_util import make_vec_env
 #from tensorflow import set_random_seed

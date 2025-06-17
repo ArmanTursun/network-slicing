@@ -18,9 +18,10 @@ import matplotlib.cm as cm
 
 
 # trainning results
-WINDOW = 50 #400
+WINDOW = 100 #400
 START = 0
 END =  10000 # up to 39900  20000
+RESETS = False
 #algo_names = ['A2C', 'PPO1', 'PPO2', 'TRPO', 'SAC', 'TD3', 'NAF', 'KBRL_97','KBRL_99']
 #labels = ['A2C', 'PPO1', 'PPO2', 'TRPO', 'SAC', 'TD3', 'NAF', 'KBRL 0.97', 'KBRL 0.99']
 algo_names = ['PPO'] # , 'PPO', 'SPPO'
@@ -95,7 +96,10 @@ if __name__=='__main__':
     color_map = {algo: color_list[i % len(color_list)] for i, algo in enumerate(algo_names)}
 
     # subplot
-    fig, axs = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), constrained_layout=False)
+    if RESETS:
+        fig, axs = plt.subplots(nrows=1, ncols=5, figsize=(20, 5), constrained_layout=False)
+    else:
+        fig, axs = plt.subplots(nrows=1, ncols=4, figsize=(20, 5), constrained_layout=False)
     fig.subplots_adjust(top=0.78)
     # iterate over algorithms
     for algo, label in zip(algo_names, labels):
@@ -158,19 +162,29 @@ if __name__=='__main__':
 
         actions_mean = np.mean(actions, axis=0)
         actions_std = np.std(actions, axis=0)
+        actions_min = np.min(actions, axis=0)
+        actions_max = np.max(actions, axis=0)
 
         violations_mean = np.mean(violations, axis=0)
         violations_std = np.std(violations, axis=0)
+        violations_min = np.min(violations, axis=0)
+        violations_max = np.max(violations, axis=0)
 
         rewards_mean = np.mean(rewards, axis=0)
         rewards_std = np.std(rewards, axis=0)
+        rewards_min = np.min(rewards, axis=0)
+        rewards_max = np.max(rewards, axis=0)
 
         regret_mean = np.mean(regret, axis=0)
         regret_std = np.std(regret, axis=0)
+        regret_min = np.min(regret, axis=0)
+        regret_max = np.min(regret, axis=0)
 
         if has_resets:
             resets_mean = np.mean(resets, axis=0)
             resets_std = np.std(resets, axis=0)
+            resets_min = np.min(resets, axis=0)
+            resets_max = np.max(resets, axis=0)
 
         if proposal:
             accuracy_mean = np.mean(accuracy, axis=0)
@@ -181,9 +195,10 @@ if __name__=='__main__':
 
         axs[2].set_title('Resource allocation', fontsize=14)
         axs[2].plot(steps, actions_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-        axs[2].fill_between(steps, actions_mean - actions_std, actions_mean + actions_std, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
-        #axs[2].fill_between(steps, actions_mean[0:SPAN] - 1.697 * actions_std[0:SPAN] / np.sqrt(runs), 
-        #                actions_mean[0:SPAN] + 1.697 * actions_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
+        #axs[2].fill_between(steps, actions_min, actions_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
+        axs[2].fill_between(steps, actions_mean[0:SPAN] - 1.697 * actions_std[0:SPAN] / np.sqrt(runs), 
+                        actions_mean[0:SPAN] + 1.697 * actions_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
             axs[2].set_ylim((0,prbs))
             axs[2].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
@@ -193,46 +208,50 @@ if __name__=='__main__':
 
         axs[0].set_title('SLA violations', fontsize=14)
         axs[0].plot(steps, violations_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-        axs[0].fill_between(steps, violations_mean - violations_std, violations_mean + violations_std, alpha=0.3, label='_nolegend_', color=color_map[algo]) #, color = '#DDDDDD'
-        #axs[0].fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
-        #                violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
+        #axs[0].fill_between(steps, violations_min, violations_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) #, color = '#DDDDDD'
+        axs[0].fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
+                        violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
             axs[0].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
             axs[0].set_ylabel('SLA violations', fontsize=14)
-            axs[3].set_ylim((0,3))
+            axs[3].set_ylim((0,1))
             #axs[0].legend(loc='best')
             axs[0].grid()
         
         axs[3].set_title('Rewards', fontsize=14)
         axs[3].plot(steps, rewards_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-        axs[3].fill_between(steps, rewards_mean - rewards_std, rewards_mean + rewards_std, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
-        #axs[3].fill_between(steps, rewards_mean[0:SPAN] - 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), 
-        #                rewards_mean[0:SPAN] + 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
+        #axs[3].fill_between(steps, rewards_min, rewards_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
+        axs[3].fill_between(steps, rewards_mean[0:SPAN] - 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), 
+                        rewards_mean[0:SPAN] + 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
             axs[3].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
             axs[3].set_ylabel('Reward', fontsize=14)
-            axs[3].set_ylim((-10,50)) # 15000
+            axs[3].set_ylim((-50,80)) # 15000
             #axs[3].legend(loc='best')
             axs[3].grid()
 
         axs[1].set_title('Cumulative SLA violations', fontsize=14)
         axs[1].plot(steps, regret_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-        axs[1].fill_between(steps, regret_mean - regret_std, regret_mean + regret_std, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
-        #axs[1].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
-        #                regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
+        #axs[1].fill_between(steps, regret_min, regret_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
+        axs[1].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
+                        regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
             axs[1].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
             axs[1].set_ylabel('cumulative SLA violations', fontsize=14)
-            axs[1].set_ylim((0,4000)) # 15000
+            axs[1].set_ylim((0,1000)) # 15000
             #axs[1].legend(loc='best')
             axs[1].grid()      
 
         if has_resets and resets.shape[0] > 0:
             axs[4].set_title('Resets', fontsize=14)
             axs[4].plot(steps, resets_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-            axs[4].fill_between(steps, resets_mean - resets_std, resets_mean + resets_std, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
-            #axs[1].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
-            #                regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = '#DDDDDD')
+            #axs[4].fill_between(steps, resets_min, resets_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
+            axs[1].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
+                            regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
             if algo == algo_names[-1]:
                 axs[4].set_xlabel('Epoch', fontsize=14)  # Add an x-label to the axes.
                 axs[4].set_ylabel('resets', fontsize=14)

@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: Your Name Here
+@author: ArmanTursun
+
+Learner and QR_control
+
 """
 import numpy as np
 import time
@@ -34,50 +37,7 @@ class QR_Control:
         self.adjusted = 0
         self.exploration_factor = exploration_factor
         self.resource_cost_factor = resource_cost_factor
-    '''
-    def select_action(self, state):
-        #Implements the "Threshold Seeker" logic.
-        #action = np.zeros(self.n_slices, dtype=np.int16)
-        action = self.action
-        for i, h in enumerate(self.learners):
-            l1_state = state[h.indexes]
-            #print('l1_state: ', l1_state)
-            # Default to a safe, minimal action if no suitable action is found
-            chosen_action = self.rng.integers(0, self.n_prbs) #self.n_prbs
-            #chosen_action = 0
-
-            # Perform a linear scan to find the cheapest action that meets the constraint.
-            for a in range(self.n_prbs + 1):
-                # Normalize action to be on a similar scale as state variables
-                x = np.append(l1_state, a / self.n_prbs)
-                
-                # Get the predicted plausible worst-case outcome
-                predicted_quantile = h.algorithm.predict(x)
-
-                # Check if the constraint is met
-                if h.constraint_type == 'upper':
-                    if predicted_quantile <= h.sla_threshold:
-                        chosen_action = a
-                        break # Found the cheapest safe action
-                elif h.constraint_type == 'lower':
-                    if predicted_quantile >= h.sla_threshold:
-                        chosen_action = a
-                        break # Found the cheapest safe action
-            
-            action[i] = chosen_action
-
-        #print(predicted_quantile)
-        # Adjust actions if total allocation exceeds system capacity
-        assigned_prbs = action.sum()
-        if assigned_prbs > self.n_prbs:
-            self.adjusted = 1
-            action = self.adjust_action(action, assigned_prbs)
-        else:
-            self.adjusted = 0
-        
-        self.action = action
-        return action, self.adjusted
-    '''
+        self.len_safe_set = [0 for i in range(self.n_slices)]
 
     # --- FINAL, DEFINITIVE select_action method in QRF_Control class ---
 
@@ -107,7 +67,6 @@ class QR_Control:
                 
                 # Use the simple 'predict' method which gives the pessimistic quantile prediction
                 pessimistic_prediction, uncertainty = h.algorithm.predict_with_uncertainty(x)
-                #print(a, pessimistic_prediction, uncertainty, h.sla_threshold)
 
                 is_safe = False
                 if h.constraint_type == 'upper':
@@ -121,13 +80,17 @@ class QR_Control:
                     safe_actions.append(a)
 
             # --- Stage 2: Find the Most Optimistic Action from the Safe Set ---
-            best_action_for_slice = 0 # Default to a safe action if the safe_actions list is empty
+            best_action_for_slice = self.n_prbs // self.n_slices # Default to a safe action if the safe_actions list is empty
             best_optimistic_score = -np.inf # We want to maximize our optimistic score
             #print(len(safe_actions))
-
+            self.len_safe_set[i] = len(safe_actions)
             if not safe_actions:
                 # If no action is deemed safe, default to the safest possible action
-                best_action_for_slice = self.rng.integers(0, self.n_prbs) #self.n_prbs
+                #best_action_for_slice = self.rng.integers(0, self.n_prbs) #self.n_prbs
+                if l1_state[-1] == 0:
+                    best_action_for_slice = 0 #self.n_prbs
+                else:
+                    best_action_for_slice = self.n_prbs // self.n_slices
             else:
                 # Now, only search within the list of safe actions
                 for a in safe_actions:
@@ -135,12 +98,12 @@ class QR_Control:
                     
                     # Get both prediction and uncertainty for the UCB calculation
                     prediction, uncertainty = h.algorithm.predict_with_uncertainty(x)
-                    #print(a, prediction, uncertainty)
 
                     # The goal is always to explore where performance might be highest.
                     # Here, we assume higher quantile prediction is better.
                     # This could be adapted to use a separate performance learner.
                     optimistic_score = prediction + self.exploration_factor * uncertainty
+                    #optimistic_score = self.exploration_factor * uncertainty
 
                     resource_penalty = self.resource_cost_factor * (a / self.n_prbs)
                     final_score = optimistic_score - resource_penalty
@@ -177,47 +140,24 @@ class QR_Control:
 
     def update_control(self, state, action, info):
         '''Updates each learner with the true KPI outcome from the last step.'''
-        #print("\n--- INSIDE update_control ---")
         for i, h in enumerate(self.learners):
-            #print(f"--- Updating Learner {i} for Slice {h.kpi_key.split('_')[1]} ---")
             l1_state = state[h.indexes]
-            #print('Found state ', state)
             l1_action = action[i]
-            #print('Action ', l1_action)
             
             # Get the true KPI value for this learner's constraint from the info dict.
             # This requires the environment to provide these specific keys.
-            #print('Found info ', info)
             if h.kpi_key in info:
-                #print(f"Found key '{h.kpi_key}'. Value: {info[h.kpi_key]}")
-                #print(info)
-                #                    l1_info     slice_info
                 kpi_values = info[h.kpi_key][h.kpi_index][h.kpi_index]['cbr_th']
                 all_kpi_value = []
                 for ue in kpi_values.keys():
                     all_kpi_value.append(kpi_values[ue])
-                #avg_kpi_value = sum(all_kpi_value) / len(all_kpi_value)
-                min_kpi_value = min(all_kpi_value)
-                #noise = np.random.uniform(-0.2, 0.2)
-                #true_kpi_value = np.clip(true_kpi_value + noise, 0.0, 1.0)
-                #print(f"Successfully accessed true_kpi_value: {true_kpi_value}")
-
-                x = np.append(l1_state, l1_action / self.n_prbs)
-                
+                min_kpi_value = min(all_kpi_value) if all_kpi_value else 0
+                x = np.append(l1_state, l1_action / self.n_prbs)               
                 # Update the quantile regressor model with the true continuous value
-                #prediction_before = h.algorithm.predict(x)
-                h.algorithm.update(x, min_kpi_value)
-                #prediction_after = h.algorithm.predict(x)
-                
-                #print(f"Prediction before update: {prediction_before:.4f}")
-                #print(f"Prediction after update:  {prediction_after:.4f}")
-                #print(f"Change in prediction: {prediction_after - prediction_before:.4f}")
+                h.algorithm.update(x, min_kpi_value, h.sla_threshold)
 
- 
             else:
                 print(f"Warning: KPI key '{h.kpi_key}' not found in environment info dictionary. Learner {i} was not updated.")
-        
-        #print("--- FINISHED update_control ---\n")
 
     def run(self, system, steps, learning_time=-1):
         """
@@ -238,6 +178,8 @@ class QR_Control:
         violation_history = np.zeros(steps, dtype=np.int16)
         adjusted_actions = np.zeros(steps, dtype=np.int16)
         resources_history = np.zeros(steps, dtype=np.int16)
+        ue_history = np.zeros(steps, dtype=object)
+        safe_history = np.empty(steps, dtype=object)
 
         # Get initial state from the environment
         state, info = system.reset()
@@ -259,10 +201,27 @@ class QR_Control:
                 # The key change: passing the full 'info' dictionary
                 self.update_control(state, action, info)
             
+            state_dim = len(state) // self.n_slices
+            state_avg = []
+            num_ue = []
+            for state_idx in range(state_dim):
+                cur_state = 0
+                for slice_idx in range(self.n_slices):
+                    cur_state += state[slice_idx * state_dim + state_idx]
+                    if state_idx == state_dim - 1:
+                        num_ue.append(round(state[slice_idx * state_dim + state_idx], 2) * 10)
+                state_avg.append(round(cur_state/self.n_slices, 2))
+                
+            
             end = time.perf_counter()   
             duration_ms = (end - start) * 1000
-            print(f"Step: {i:>5}, Action = {action}, adjusted = {self.adjusted}, Reward = {reward:>6.2f}, Total Violations = {info.get('total_violations', 0):>3}, Duration = {duration_ms:>5.1f}ms")
+            state_str = ' '.join('{:<4}'.format(a) for a in state_avg)
+            action_str = ' '.join('{:<2}'.format(a) for a in action)
+            safe_action_str = ' '.join('{:<2}'.format(a) for a in self.len_safe_set)
+            ue_str = ' '.join('{:<2}'.format(a) for a in num_ue)
+            print(f"Step: {i:>5}, UE: {ue_str} STATE: {state_str}, SafeActions: {safe_action_str}, Action: {action_str}, adjusted = {self.adjusted}, Reward = {reward:>6.2f}, Total Violations = {info.get('total_violations', 0):>3}, Duration = {duration_ms:>5.1f}ms")
             start = time.perf_counter()
+            
             # The agent selects the next action based on the new state
             action, adjusted = self.select_action(new_state)
             
@@ -274,6 +233,8 @@ class QR_Control:
             violation_history[i] = info.get('total_violations', 0)
             resources_history[i] = action.sum()
             adjusted_actions[i] = adjusted
+            ue_history[i] = num_ue
+            safe_history[i] = self.len_safe_set
             
             
         # Print a summary of the run
@@ -288,7 +249,9 @@ class QR_Control:
             'reward': reward_history, 
             'resources': resources_history, 
             'adjusted': adjusted_actions,
-            'violation': violation_history
+            'violation': violation_history,
+            'ue': ue_history,
+            'safe set': safe_history
         }
 
         return output

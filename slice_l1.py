@@ -224,7 +224,9 @@ class SliceL1eMBB:
         #ps = []
         if queued_data > 0 and self.n_prbs > 0:
             # scheduling
-            self.scheduler.allocate(self.ues, self.n_prbs)
+            #error_bound = np.random.uniform(0.1, 0.5)
+            error_bound = 0.1
+            self.scheduler.allocate(self.ues, self.n_prbs, error_bound = error_bound)
             for ue in self.ues:
                 # transmission and ue update
                 received = False

@@ -3,6 +3,7 @@
 """
 @author: armantursun
 
+Main
 
 """
 
@@ -11,14 +12,15 @@ from numpy import savez
 from numpy.random import default_rng
 from itertools import product
 import concurrent.futures as cf
-from scenario_creator import create_env, create_qr_agent
+from scenario_creator import create_env
+from qr_scenario_creator import create_qr_agent
 
 scenarios = [0] # ,1,2
 quantile_list = [0.95] # , [0.99, 0.999] , 0.99
 
 # We define the SLA constraints for each slice type
 # For eMBB, let's assume a max delay constraint
-embb_sla = {'threshold': 1e6, 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Delay > 3e6
+embb_sla = {'threshold': [0.5e6, 1e6, 1.5e6], 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Delay > 3e6
 
 # For mMTC, let's assume a minimum success rate constraint
 mmtc_sla = {'threshold': 0.99, 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Success Rate > 99%
@@ -33,13 +35,16 @@ all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 # These can be tuned based on experiments
 QR_PARAMS = {
     'learning_rate': 0.1,
-    'budget': 1000,               # Max number of support vectors to keep in memory
+    'budget': 2000,              # Max number of support vectors to keep in memory
     'gamma': 10,                 # Gamma for the Gaussian Kernel
+    'matern_length_scale': 0.1,  # for Matern kernel
+    'matern_nu': 1.5,            # nu for Matern kernel, only 0.5, 1.5, and 2.5 available
     'exploration_factor': 1,
-    'resource_cost_factor': 1
+    'resource_cost_factor': 1,
+    'gradient_penalty': 10.0
 }
 
-RUNS = 1
+RUNS = 3
 PROCESSES = 8 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
@@ -47,12 +52,16 @@ PENALTY = 10
 VERBOSE = True
 SLOT_PER_STEP = 100
 STEPS_PER_UPDATE = 50
-EPOCH = 10
+EPOCH = 200
 TRAIN_STEPS = STEPS_PER_UPDATE * EPOCH
 
+matern_dict = {1.5: '15', 0.5: '05', 2.5: '25'}
+explo_dict = {1: '1', 2: '2', 3: '3'}
+cost_dict = {0: '0', 1: '1', 2: '2', 3: '3'}
 run_list = list(range(RUNS))
-name = 'QR'
-
+name = 'QR' + '_' + matern_dict[QR_PARAMS['matern_nu']]
+name = name + '_' + explo_dict[QR_PARAMS['exploration_factor']]
+name = name + '_' + cost_dict[QR_PARAMS['resource_cost_factor']]
 class Evaluator():
     def __init__(self, scenario, quantile):
         self.scenario = scenario
