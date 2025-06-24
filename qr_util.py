@@ -15,39 +15,38 @@ class SV:
         self.counter = 0
         self.budget = budget
         self.coeff = np.zeros((budget), dtype=np.float32)
+        self.outcomes = np.zeros(budget, dtype=np.float32)
         self.is_full = False # New flag to track if the buffer has wrapped around
 
-    def add_support_vector(self, x, coeff_value):
+    def add_support_vector(self, x, coeff_value, outcome_value):
         """
         Atomically adds a support vector and its coefficient at the current
         counter position, then increments the counter.
         """
-        """
-        self.landmarks[self.counter, :] = x
-        self.coeff[self.counter] = coeff_value
-        
-        # Check if we are about to wrap around, which means the buffer is now full
-        if self.counter == self.budget - 1:
-            self.is_full = True
-        #print(self.counter)
-        self.counter = (self.counter + 1) % self.budget
-        """
 
-        if not self.is_full:
-            # Buffer is not full, just add to the next available slot
-            self.landmarks[self.counter, :] = x
-            self.coeff[self.counter] = coeff_value
-            self.counter += 1
-            if self.counter == self.budget:
-                self.is_full = True
+        idx_to_write = self.counter
+        
+        if self.is_full:
+            # If memory is full, find the index of the least influential landmark to replace
+            idx_to_write = np.argmin(np.abs(self.coeff))
         else:
-            # Buffer is full. Find the index of the least important support vector.
-            # The importance is the absolute value of its alpha coefficient.
-            idx_to_replace = np.argmin(np.abs(self.coeff))
-            
-            # Replace the least important memory with the new one.
-            self.landmarks[idx_to_replace, :] = x
-            self.coeff[idx_to_replace] = coeff_value
+            # If memory is not full, check if we are about to fill it
+            if self.counter == self.budget - 1:
+                self.is_full = True
+            self.counter += 1
+        
+        self.landmarks[idx_to_write, :] = x
+        self.coeff[idx_to_write] = coeff_value
+        self.outcomes[idx_to_write] = outcome_value
+    
+    def get_active_data(self):
+        """ Returns all active data needed for prediction and fallbacks. """
+        num_active = self.budget if self.is_full else self.counter
+        return {
+            "landmarks": self.landmarks[:num_active],
+            "coeffs": self.coeff[:num_active],
+            "outcomes": self.outcomes[:num_active]
+        }
 
 class SimpleGaussianKernel:
     def __init__(self, gamma = 1.0):
@@ -105,17 +104,13 @@ class KernelizedOnlineQuantileRegressor:
 
     def _get_prediction_and_uncertainty(self, x):
         # Determine how many support vectors are active
-        if self.sv.is_full:
-            num_active_svs = self.sv.budget
-        else:
-            num_active_svs = self.sv.counter
 
-        if num_active_svs == 0:
+        active_data = self.sv.get_active_data()
+        active_landmarks = active_data["landmarks"]
+        active_coeffs = active_data["coeffs"]
+
+        if active_landmarks.shape[0] == 0:
             return 0.0, 1.0
-        
-        # Get active support vectors and coefficients up to the current counter
-        active_landmarks = self.sv.landmarks[:num_active_svs]
-        active_coeffs = self.sv.coeff[:num_active_svs]
 
         k = self.kernel(x, active_landmarks)
         
@@ -147,19 +142,24 @@ class KernelizedOnlineQuantileRegressor:
         # Step 1: Make a prediction with the current model
         prediction = self.predict(x)
         error = y_true - prediction
-        
-        # Step 2: Determine the gradient update based on the pinball loss
-        # This small value is the new coefficient for our new support vector.
+
         if error > 0:
-            # We under-predicted, apply a large push upwards
+            # Standard under-prediction update
             gradient_update = self.learning_rate * self.quantile
         else:
-            # We over-predicted, apply a small push downwards
+            # Standard over-prediction update
             gradient_update = -self.learning_rate * (1 - self.quantile)
-
-        if y_true < sla_threshold and prediction >= sla_threshold :#or y_true >= sla_threshold and prediction < sla_threshold:
-            # If a violation occurred, amplify the entire gradient update
-            gradient_update *= self.gradient_penalty
-
+            if y_true < sla_threshold and prediction >= sla_threshold:
+                gradient_update *= self.gradient_penalty
         # Step 3: Add the new data point x as a support vector and set its coefficient
-        self.sv.add_support_vector(x, gradient_update)
+        self.sv.add_support_vector(x, gradient_update, y_true)
+    
+
+    def add_penalty_update(self, x, penalty_coefficient=-0.05):
+        """
+        Adds a support vector with a SMALL, fixed negative coefficient to penalize
+        an action that was proposed but deemed infeasible.
+        """
+        # The outcome is not real, so we store a placeholder
+        placeholder_outcome = -1.0 
+        self.sv.add_support_vector(x, penalty_coefficient, placeholder_outcome)

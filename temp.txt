@@ -80,3 +80,21 @@ state: [1.         0.33333333 0.25       0.50555    0.42857143
         # GBRs violated by 50% (margin=-0.5), queues full (emptiness=0.0) -> safety = -0.5*2 + (0-0.5)*2*1 = -1 - 1 = -2
 
         return float(safety_value)
+
+
+
+
+
+#if (i+1) % 500 == 0:
+#    print(f"Step: {i+1:>5}, UE: {ue_str}, Empty Safe Set: {cum_empty_safe:>3}, adjusted = {cum_adjusted:>3}, Reward = {cum_reward:>6.1f}, Total Violations = {cum_violation:>4}")
+cum_violation += info.get('total_violations', 0)
+            cum_adjusted += self.adjusted
+            cum_reward += reward
+            for i in range(self.n_slices):
+                if num_ue[i] != 0 and self.len_safe_set[i] == 0:
+                    cum_empty_safe += 1
+
+cum_violation = 0
+        cum_adjusted = 0
+        cum_reward = 0
+        cum_empty_safe = 0

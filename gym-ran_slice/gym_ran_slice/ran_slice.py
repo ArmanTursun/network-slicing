@@ -33,9 +33,9 @@ class RanSlice(gym.Env):
         """
         #if seed is not None:
         #    self.seed(seed)
-        state = self.node_b.reset()
+        state, info = self.node_b.reset()
 
-        return state, {} # reward, done, info can't be included
+        return state, info # reward, done, info can't be included
 
     def step(self, action):
         """

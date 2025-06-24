@@ -176,7 +176,7 @@ class SINRSelectiveFading:
             if is_nan:
                 continue
             mean_snr = round(np.mean(fading_vector + self.users[user_id]['nominal_sinr']))
-            if mean_snr >= 8 and mean_snr <= 16: # set SINR to > 15dB
+            if mean_snr >= 8 and mean_snr <= 15: # set SINR to > 15dB
                 break
 
         '''

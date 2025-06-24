@@ -119,35 +119,39 @@ class KBRL_Control:
 
         SLA_history = np.zeros((steps), dtype = np.int16)
         reward_history = np.zeros((steps), dtype = np.float64)
-        violation_history = np.zeros((steps), dtype = np.int16)
+        violation_history = np.zeros((steps), dtype = object)
         adjusted_actions = np.zeros((steps), dtype = np.int16)
         resources_history = np.zeros((steps), dtype = np.int16)
         hits_history = np.zeros((len(action),steps), dtype = np.int16)
+        ue_history = np.zeros(steps, dtype=object)
 
         state = system.reset()
         state = state[0]
         start = time.perf_counter()
         for i in range(steps):
-            
             new_state, reward, _, _, info = system.step(action)
             SLA_labels = info['SLA_labels']
             if learning_time < steps:
                 hits = self.update_control(state, action, SLA_labels)
             
+            num_ue = info['ues']
+
             end = time.perf_counter()   
             duration_ms = (end - start) * 1000
-            #print(info)
-            print(f"Step: {i:>5}, Action = {action}, Reward = {reward:>6}, Total violation = {info['total_violations']:>3}, Duration = {duration_ms:>5.1f}")
+            ue_str = ' '.join('{:<2}'.format(a) for a in num_ue)
+            if (i+1) % 500 == 0:
+                print(f"Step: {i+1:>5}, UE: {ue_str}, Action = {action}, Reward = {reward:>6}, Total violation = {info['total_violations']:>3}, Duration = {duration_ms:>5.1f}")
             start = time.perf_counter()
             action, self.adjusted = self.select_action(new_state)
             state = new_state
-
+            
             SLA_history[i] = SLA_labels.sum()
-            reward_history[i] = reward
-            violation_history[i] = info['total_violations']
+            reward_history[i] = reward        
+            violation_history[i] = info.get('violations')
             resources_history[i] = action.sum()
             adjusted_actions[i] = self.adjusted
             hits_history[:,i] = hits
+            ue_history[i] = num_ue
             
 
         print('mean resources = {}'.format(resources_history.mean()))
@@ -161,6 +165,7 @@ class KBRL_Control:
             'hits': hits_history,
             'adjusted': adjusted_actions,
             'SLA': SLA_history,
+            'ue': ue_history,
             'violation': violation_history
         }
 

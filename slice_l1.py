@@ -214,7 +214,8 @@ class SliceL1eMBB:
             if self.n_prbs > 0:
                 snr = self.snr_generator.get_snr(ue.id)
                 try:
-                    ue.estimate_snr(snr[self.prb_slice])
+                    #ue.estimate_snr(snr[self.prb_slice])
+                    ue.estimate_snr(snr)
                     #snrs.append(ue.e_snr)
                 except:
                     print('problem with snr estimation!')

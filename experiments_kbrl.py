@@ -23,21 +23,21 @@ from kbrl_scenario_creator import create_kbrl_agent
 scenarios = [0] # ,1,2
 accuracy_list = [[0.97, 0.99]] # , [0.99, 0.999] 0.97, 
 
-scenario_1 = { 'n_prbs': 80, 'n_embb': 3, 'n_mmtc': 0}
+scenario_1 = { 'n_prbs': 100, 'n_embb': 3, 'n_mmtc': 0}
 scenario_2 = { 'n_prbs': 150, 'n_embb': 3, 'n_mmtc': 2}
 scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
-RUNS = 3
-PROCESSES = 8 # 30 if enough threads 
+RUNS = 10
+PROCESSES = 10 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
 PENALTY = 10
 VERBOSE = True
 SLOT_PER_STEP = 100
 STEPS_PER_UPDATE = 50
-EPOCH = 200
+EPOCH = 20
 TRAIN_STEPS = STEPS_PER_UPDATE * EPOCH
 
 run_list = list(range(RUNS))
@@ -74,13 +74,13 @@ if __name__=='__main__':
         evaluator = Evaluator(scenario, a_range)
         # ################################################################
         # # use this code for sequential execution
-        for run in run_list:
-            evaluator.evaluate(run)
+        #for run in run_list:
+        #    evaluator.evaluate(run)
         #     print('run {} finised!'.format(run))   
         # ################################################################
 
         # ################################################################
         # use this code for parallel execution
-        #with cf.ProcessPoolExecutor(PROCESSES) as E:
-        #    results = E.map(evaluator.evaluate, run_list)
+        with cf.ProcessPoolExecutor(PROCESSES) as E:
+            results = E.map(evaluator.evaluate, run_list)
         # ################################################################

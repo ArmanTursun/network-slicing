@@ -22,7 +22,8 @@ class NodeB():
         for slice_l1 in self.slices_l1:
             slice_l1.reset()
         state = self.get_state()
-        return state
+        info = self.get_info()
+        return state, info
 
     def get_n_variables(self):
         n_variables = 0
@@ -48,7 +49,7 @@ class NodeB():
     
     def get_info(self, violations = 0, SLA_labels = 0):
         info = {'l1_info': [l1.get_info() for l1 in self.slices_l1], 'SLA_labels': SLA_labels, \
-                'violations': violations, 'n_prbs': [l1.n_prbs for l1 in self.slices_l1]}
+                'violations': violations, 'n_prbs': [l1.n_prbs for l1 in self.slices_l1], 'ues': [len(l1.ues) for l1 in self.slices_l1]}
         return info
 
     def compute_reward(self):

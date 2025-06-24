@@ -18,7 +18,7 @@ from channel_models import SINRSelectiveFading, MCSCodeset, SNRGenerator
 
 # ----------------- scenario parameters ------------------------
 
-scenario_1 = { 'n_prbs': 80, 'n_embb': 3, 'n_mmtc': 0}
+scenario_1 = { 'n_prbs': 100, 'n_embb': 3, 'n_mmtc': 0}
 scenario_2 = { 'n_prbs': 150, 'n_embb': 3, 'n_mmtc': 2}
 scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
@@ -28,12 +28,12 @@ scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
 CBR_description = { # GBR traffic
 #    'lambda': 1.0/60.0, # low traffic
-    'lambda': 2.0/60.0, # UE arrivals: Poisson process with arrival rate = 2 users / min
-    't_mean': 30.0, # UE connection time: Exponentially distributed with mean = 30 secs
+    'lambda': 1.0/120.0, # UE arrivals: Poisson process with arrival rate = 2 users / min
+    't_mean': 60.0, # UE connection time: Exponentially distributed with mean = 30 secs
     'bit_rate': [0.6e6, 1.1e6, 1.6e6] # slightly larger than SLA
 }
 
-state_variables_embb = ['cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue']
+state_variables_embb = ['5th_cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue'] # , 'cbr_queue' , 'cbr_prb', '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb'
 
 # -------------------- mMTC parameters -------------------------
 # packet size 1000 bits
@@ -51,7 +51,8 @@ SLA_mmtc = {
 
 # -------------------- create environment -------------------------
 
-def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propagation_type = 'macro_cell_urban_2GHz', L1_level = True, penalty = 100):
+def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, 
+               propagation_type = 'macro_cell_urban_2GHz', L1_level = True, penalty = 100, quantile = 5):
     '''
     Returns slice ran environment:
     - rng: for random number generation
@@ -67,12 +68,12 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
     # -------------------- eMBB normalization constants ----------------------
 
     norm_const_embb = { # average in each step
-        'cbr_traffic': [1e6 * time_per_step, 1.5e6 * time_per_step, 2e6 * time_per_step], # total traffic each step
-        'cbr_th': [1e6 * time_per_step, 1.5e6 * time_per_step, 2e6 * time_per_step],
+        'cbr_traffic': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step], # total traffic each step
+        'cbr_th': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
         'cbr_prb': n_prbs * slots_per_step, # total prb each step
         'cbr_queue': 10e4 * slots_per_step,
         'cbr_snr': 35 * slots_per_step,
-        'cbr_ue': 10
+        'cbr_ue': 20
     }
 
     # -------------------- mMTC normalization constants -----------------------
@@ -85,7 +86,7 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
 
     SLA_embb = { # overall
     'cbr_th': [0.5e6  * time_per_step / norm_const_embb['cbr_th'][0], 1e6  * time_per_step / norm_const_embb['cbr_th'][1], 1.5e6  * time_per_step / norm_const_embb['cbr_th'][2]], # normed total throughput of slice each step?
-    'cbr_prb': 20  * slots_per_step / norm_const_embb['cbr_prb'], # normed average 30  GBR authorized capacity 20 RBs/subframe
+    'cbr_prb': [15  * slots_per_step / norm_const_embb['cbr_prb'], 20  * slots_per_step / norm_const_embb['cbr_prb'], 35  * slots_per_step / norm_const_embb['cbr_prb']], # normed average 30  GBR authorized capacity 20 RBs/subframe
     'cbr_queue': 10e4 * slots_per_step / norm_const_embb['cbr_queue'], # normed average 5e4 Maximum average queue per GBR user: 100Kbit/UE
     'vbr_th': 10e4, # 10e6  # total throughput of slice ?
     'vbr_prb': 30, # 40 non-GBR QoS compliant capacity 30RBs/subframe
@@ -98,7 +99,8 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
         return SliceRANmMTC(rng, id, SLA_mmtc, MTC_description, state_variables_mmtc, norm_const_mmtc, slots_per_step)
 
     def new_slice_embb(id, rng, user_counter):
-        return SliceRANeMBB(rng, user_counter, id, SLA_embb, CBR_description, state_variables_embb, norm_const_embb, slots_per_step)
+        return SliceRANeMBB(rng, user_counter, id, SLA_embb, CBR_description, 
+                            state_variables_embb, norm_const_embb, slots_per_step, quantile = quantile)
 
     # ------------------- environment creation ------------------------
 
@@ -116,7 +118,7 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
         index = 0
         for id in range(n_embb):
             slices_ran_embb = [new_slice_embb(id, rng, user_counter)]
-            slice_l1_embb = SliceL1eMBB(rng, snr_generator, 20, slices_ran_embb, scheduler, l1sliceid = index)
+            slice_l1_embb = SliceL1eMBB(rng, snr_generator, 0, slices_ran_embb, scheduler, l1sliceid = index)
             slices_l1.append(slice_l1_embb)
             index += 1
 
@@ -129,7 +131,7 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50, propa
     else: # slices are multiplexed in the L1 (the scheduler should handle ues from different slices) 
 
         slices_ran_embb = [new_slice_embb(id, rng, user_counter) for id in range(n_embb)]
-        slice_l1_embb = SliceL1eMBB(rng, snr_generator, 20, slices_ran_embb, scheduler)
+        slice_l1_embb = SliceL1eMBB(rng, snr_generator, 0, slices_ran_embb, scheduler)
         slices_l1 = [slice_l1_embb]
 
         if n_mmtc > 0:

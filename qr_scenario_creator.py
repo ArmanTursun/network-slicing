@@ -12,10 +12,10 @@ from qr_control import QR_Learner, QR_Control
 from qr_util import KernelizedOnlineQuantileRegressor, SV, SimpleGaussianKernel, MaternKernel
 
 # Initial random action range
-embb_a = (2, 8)
-mmtc_a = (2, 10)
+embb_a = (0, 1)
+mmtc_a = (0, 1)
 
-state_variables_embb = ['cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue']
+state_variables_embb = ['5th_cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue'] #  , '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb'
 state_variables_mmtc = ['devices', 'avg_rep', 'delay']
 
 # -------------------- create QR agent -------------------------
@@ -40,12 +40,12 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
     # -------------------- normalization constants ----------------------
 
     norm_const_embb = { # average in each step
-        'cbr_traffic': [1e6 * time_per_step, 1.5e6 * time_per_step, 2.0e6 * time_per_step],
-        'cbr_th': [1e6 * time_per_step, 1.5e6 * time_per_step, 2.0e6 * time_per_step],
+        'cbr_traffic': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
+        'cbr_th': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
         'cbr_prb': n_prbs * slots_per_step,
         'cbr_queue': 10e4 * slots_per_step,
         'cbr_snr': 35 * slots_per_step,
-        'cbr_ue': 10
+        'cbr_ue': 20
     }
     norm_const_mmtc = {
         'devices': 100 * slots_per_step,
@@ -61,7 +61,7 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
         # The learning algorithm for this specific SLA
         # Input dimension is state_dim + 1 (for the action)
         # 1. Create the dedicated memory store (SV) for this learner
-        sv_store = SV(dimension=embb_dim+1, budget=qr_params['budget'])
+        sv_store = SV(dimension=embb_dim+1+2, budget=qr_params['budget'])
 
         # 2. Create the kernel object
         #kernel = SimpleGaussianKernel(gamma=qr_params['gamma'])
@@ -69,13 +69,11 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
         algorithm = KernelizedOnlineQuantileRegressor(sv=sv_store, kernel=kernel, quantile=quantile, 
                                                       learning_rate=qr_params['learning_rate'], 
                                                       gradient_penalty = qr_params['gradient_penalty'])
-        initial_action = rng.integers(embb_a[0], embb_a[1])
         
         # The learner holds the algorithm and the SLA definition
         learner = QR_Learner(
             algorithm=algorithm, 
             indexes=slice(i, i + embb_dim), 
-            initial_action=initial_action,
             sla_threshold=embb_sla['threshold'][slice_idx] * time_per_step / norm_const_embb['cbr_th'][slice_idx],
             constraint_type=embb_sla['type'],
             kpi_key=embb_sla['kpi_key'], # Key to find the true KPI value from the env's info dict
@@ -87,17 +85,15 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
 
     # Create one learner instance per mMTC slice (with its success rate SLA)
     for slice_idx in range(n_mmtc):
-        sv_store = SV(dimension=mmtc_dim+1, budget=qr_params['budget'])
+        sv_store = SV(dimension=mmtc_dim+1+2, budget=qr_params['budget'])
         kernel = SimpleGaussianKernel(gamma=qr_params['gamma'])
         algorithm = KernelizedOnlineQuantileRegressor(sv=sv_store, kernel=kernel, quantile=quantile, 
                                                       learning_rate=qr_params['learning_rate'],
                                                       gradient_penalty = qr_params['gradient_penalty'])
-        initial_action = rng.integers(mmtc_a[0], mmtc_a[1])
         
         learner = QR_Learner(
             algorithm=algorithm, 
             indexes=slice(i, i + mmtc_dim), 
-            initial_action=initial_action,
             sla_threshold=mmtc_sla['threshold'],
             constraint_type=mmtc_sla['type'],
             kpi_key=mmtc_sla['kpi_key'], # Assumes unique keys for KPIs
@@ -107,6 +103,9 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
         i += mmtc_dim
 
     # The main controller wraps all the individual learners
-    qr_agent = QR_Control(rng, learners, n_prbs, exploration_factor=qr_params['exploration_factor'], resource_cost_factor=qr_params['resource_cost_factor'])
+    qr_agent = QR_Control(rng, learners, n_prbs, state_variables_embb, norms = norm_const_embb, 
+                          exploration_factor=qr_params['exploration_factor'], resource_cost_factor=qr_params['resource_cost_factor'], 
+                          epsilon = qr_params['epsilon'], k = qr_params['k_neighbors'],
+                          adjustment_penalty = qr_params['adjustment_penalty'])
 
     return qr_agent
