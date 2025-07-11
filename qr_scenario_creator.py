@@ -10,12 +10,14 @@ create_agent
 # ------------ QR Learner initialization values ------------------
 from qr_control import QR_Learner, QR_Control
 from qr_util import KernelizedOnlineQuantileRegressor, SV, SimpleGaussianKernel, MaternKernel
+from qr_dqrrn import DeepQuantileRegressor 
+from qr_esn import EchoStateNetworkRegressor
 
 # Initial random action range
 embb_a = (0, 1)
 mmtc_a = (0, 1)
 
-state_variables_embb = ['5th_cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue'] #  , '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb'
+state_variables_embb = ['5th_cbr_th', 'cbr_queue', 'cbr_snr', 'cbr_ue'] #  , '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb' , 'cbr_prb'
 state_variables_mmtc = ['devices', 'avg_rep', 'delay']
 
 # -------------------- create QR agent -------------------------
@@ -40,12 +42,12 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
     # -------------------- normalization constants ----------------------
 
     norm_const_embb = { # average in each step
-        'cbr_traffic': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
-        'cbr_th': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
+        'cbr_traffic': [0.75e6 * time_per_step, 0.75e6 * time_per_step, 1.25e6 * time_per_step],
+        'cbr_th': [0.75e6 * time_per_step, 0.75e6 * time_per_step, 1.25e6 * time_per_step],
         'cbr_prb': n_prbs * slots_per_step,
         'cbr_queue': 10e4 * slots_per_step,
         'cbr_snr': 35 * slots_per_step,
-        'cbr_ue': 20
+        'cbr_ue': 10
     }
     norm_const_mmtc = {
         'devices': 100 * slots_per_step,
@@ -61,7 +63,8 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
         # The learning algorithm for this specific SLA
         # Input dimension is state_dim + 1 (for the action)
         # 1. Create the dedicated memory store (SV) for this learner
-        sv_store = SV(dimension=embb_dim+1+2, budget=qr_params['budget'])
+        input_dim = embb_dim+1+2
+        sv_store = SV(dimension=input_dim, budget=qr_params['budget'])
 
         # 2. Create the kernel object
         #kernel = SimpleGaussianKernel(gamma=qr_params['gamma'])
@@ -69,7 +72,20 @@ def create_qr_agent(rng, n, scenarios, quantile, embb_sla, mmtc_sla, qr_params, 
         algorithm = KernelizedOnlineQuantileRegressor(sv=sv_store, kernel=kernel, quantile=quantile, 
                                                       learning_rate=qr_params['learning_rate'], 
                                                       gradient_penalty = qr_params['gradient_penalty'])
-        
+        # --- MODIFIED: Instantiate the new deep learner ---
+        #algorithm = DeepQuantileRegressor(
+        #        input_dim=input_dim,
+        #        quantile=quantile, # Initial quantile
+        #        learning_rate=qr_params['learning_rate'] # Use a smaller LR for NNs
+        #)
+
+        #algorithm = EchoStateNetworkRegressor(
+        #    input_dim=input_dim,
+        #    reservoir_size=qr_params.get('reservoir_size', 200),
+        #    spectral_radius=qr_params.get('spectral_radius', 0.95),
+        #    learning_rate=qr_params.get('esn_learning_rate', 0.8)
+        #)
+
         # The learner holds the algorithm and the SLA definition
         learner = QR_Learner(
             algorithm=algorithm, 

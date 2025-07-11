@@ -139,7 +139,7 @@ class KBRL_Control:
             end = time.perf_counter()   
             duration_ms = (end - start) * 1000
             ue_str = ' '.join('{:<2}'.format(a) for a in num_ue)
-            if (i+1) % 500 == 0:
+            if (i+1) % 1000 == 0:
                 print(f"Step: {i+1:>5}, UE: {ue_str}, Action = {action}, Reward = {reward:>6}, Total violation = {info['total_violations']:>3}, Duration = {duration_ms:>5.1f}")
             start = time.perf_counter()
             action, self.adjusted = self.select_action(new_state)

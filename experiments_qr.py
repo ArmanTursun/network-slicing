@@ -20,13 +20,14 @@ from itertools import product
 import concurrent.futures as cf
 from scenario_creator import create_env
 from qr_scenario_creator import create_qr_agent
+import time
 
 scenarios = [0] # ,1,2
-quantile_list = [0.01] # , 0.01, 0.1, 0.25   0.05, 0.1, 0.25, 0.5
+quantile_list = [0.05] # , 0.01, 0.1, 0.25   0.05, 0.1, 0.25, 0.5 # , 0.05, 0.1
 
 # We define the SLA constraints for each slice type
 # For eMBB, let's assume a max delay constraint
-embb_sla = {'threshold': [0.5e6, 1e6, 1.5e6], 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Delay > 3e6
+embb_sla = {'threshold': [0.5e6, 0.5e6, 1e6], 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Delay > 3e6
 
 # For mMTC, let's assume a minimum success rate constraint
 mmtc_sla = {'threshold': 0.99, 'quantile': quantile_list, 'type': 'lower', 'kpi_key': 'l1_info'} # Success Rate > 99%
@@ -45,15 +46,15 @@ QR_PARAMS = {
     'gamma': 10,                 # Gamma for the Gaussian Kernel
     'matern_length_scale': 0.1,  # for Matern kernel
     'matern_nu': 1.5,            # nu for Matern kernel, only 0.5, 1.5, and 2.5 available
-    'exploration_factor': 1,
-    'resource_cost_factor': 1.0,
+    'exploration_factor': 0,
+    'resource_cost_factor': 3.0,
     'gradient_penalty': 2.0,
-    'epsilon': 0.05,
+    'epsilon': 0.1,
     'k_neighbors': 10,
     'adjustment_penalty': -0.01
 }
 
-RUNS = 10
+RUNS = 30
 PROCESSES = 10 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
@@ -61,14 +62,14 @@ PENALTY = 10
 VERBOSE = True
 SLOT_PER_STEP = 100
 STEPS_PER_UPDATE = 50
-EPOCH = 20
+EPOCH = 200
 TRAIN_STEPS = STEPS_PER_UPDATE * EPOCH
 
 matern_dict = {1.5: '15', 0.5: '05', 2.5: '25'}
 explo_dict = {0: '0', 1: '1', 2: '2', 3: '3'}
-cost_dict = {0: '0', 1: '1', 2: '2', 3: '3'}
+cost_dict = {0: '0', 0.2: '02', 0.5: '05', 0.8: '08', 1: '1', 2: '2', 3: '3', 5: '5'}
 gradient_dict = {1: '1', 2: '2', 5: '5', 10: '10'}
-epsilon_dict = {0: '0', 0.05: '005', 0.1: '01', 0.2: '02', 0.3: '03', 0.5: '05'}
+epsilon_dict = {0: '0', 0.05: '005', 0.1: '01', 0.2: '02', 0.3: '03', 0.5: '05', 1: '1'}
 run_list = list(range(RUNS))
 algo_name = 'QR'
 name = algo_name + '_' + matern_dict[QR_PARAMS['matern_nu']]
@@ -76,13 +77,14 @@ name = name + '_' + explo_dict[QR_PARAMS['exploration_factor']]
 name = name + '_' + cost_dict[QR_PARAMS['resource_cost_factor']]
 name = name + '_' + gradient_dict[QR_PARAMS['gradient_penalty']]
 name = name + '_' + epsilon_dict[QR_PARAMS['epsilon']]
+
 class Evaluator():
     def __init__(self, scenario, quantile):
         self.scenario = scenario
         self.quantile = quantile
         a = int(quantile*100)
         self.a = a
-        self.path = './results/scenario_{}/{}_{}/'.format(scenario, name, a)
+        self.path = './results/scenario_{}/{}_cost{}/'.format(scenario, name, cost_dict[QR_PARAMS['resource_cost_factor']])
         if not os.path.isdir(self.path):
             try:
                 os.makedirs(self.path)
@@ -92,7 +94,8 @@ class Evaluator():
                 print('Successfully created the directory {}'.format(self.path))
     
     def evaluate(self, i):
-        rng = default_rng(seed = i)
+        seed = int(time.time()+i)
+        rng = default_rng(seed = seed)
         node_env = create_env(rng, all_scenarios = all_scenarios, n = self.scenario, slots_per_step = SLOT_PER_STEP, penalty = PENALTY, quantile = int(quantile*100))
         print('test {}, quantile {}, run {}: Environment created!'.format(name, self.a, i))
         qr_agent = create_qr_agent(rng, self.scenario, all_scenarios, quantile = self.quantile, 

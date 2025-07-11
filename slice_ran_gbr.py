@@ -69,6 +69,7 @@ class UE:
         self.a = 1 - self.b
         self.queue = 0
         self.slot_length = slot_length
+        self.max_tx_power_mW = 20 # Example: 200mW is 23 dBm
 
         # per subframe variables
         self.snr = 0 # real error values per prb
@@ -216,6 +217,7 @@ class SliceRANeMBB:
         self.cbr_ues = {}
 
         self.info = {'cbr_traffic': {}, 'cbr_th': {}, 'fair_cbr_prb': 0, 'starve_cbr_prb': 0, 'cbr_prb': {}, 'cbr_queue':{}, 'cbr_snr': {}, 'cbr_ue': 0}
+        self.ue_time = {}
 
         self.reset()
 
@@ -250,7 +252,7 @@ class SliceRANeMBB:
             if self.cbr_cac(): # check admission control
                 # generate new user
                 ue_list = []
-                for i in range(3): # 3 ues per slice
+                for i in range(1): # 3 ues per slice
                     ue_id = next(self.user_counter)
                     cbr_source = CbrSource(bit_rate = self.cbr_bit_rate)
                     #print(self.cbr_bit_rate)
@@ -266,23 +268,27 @@ class SliceRANeMBB:
                         if key != 'fair_cbr_prb' and key != 'starve_cbr_prb' and key != 'cbr_ue':
                             self.info[key][ue.id] = 0
                     self.info['cbr_ue'] += 1
+                    self.ue_time[ue.id] = 1
 
                 #return [ue] # return user
                 return ue_list 
-        #else:
-        #    self.cbr_steps_next_arrival -= 1    
+        else:
+            self.cbr_steps_next_arrival -= 1    
+            for ue_id in self.ue_time.keys():
+                self.ue_time[ue_id] += 1
         return []
 
     def departures(self):
         departures = []
         current_ids = list(self.remaining_time.keys())
         for id in current_ids:
-            #self.remaining_time[id] -= 1 # assume ue does not leave
+            self.remaining_time[id] -= 1 # assume ue does not leave
             if self.remaining_time[id] == 0:
                 departures.append(id)
                 del self.remaining_time[id] # delete timer
                 self.cbr_ues.pop(id, None) # or here  
                 self.del_ue_from_info(id)  
+                self.ue_time.pop(id, None) # or here
         return departures   
 
     def del_ue_from_info(self, id):
@@ -310,6 +316,8 @@ class SliceRANeMBB:
             else:
                 for ue in self.info[key].keys():
                     self.info[key][ue] = 0
+        for ue_id in self.ue_time.keys():
+            self.ue_time[ue_id] = 0
 
     def reset_state(self):
         self.state = np.full((len(self.state_variables)), 0, dtype = np.float64)
@@ -357,7 +365,8 @@ class SliceRANeMBB:
         prb_violation = 0
         queue_violation = 0
         for ue in self.info['cbr_th'].keys():
-            if self.info['cbr_th'][ue] < self.SLA['cbr_th'][self.id]:
+            cur_time = self.ue_time[ue] / self.slots_per_step
+            if self.info['cbr_th'][ue] / cur_time < self.SLA['cbr_th'][self.id]:
                 th_violation += 1
         for ue in self.info['cbr_prb'].keys():
             if self.info['cbr_prb'][ue] < self.SLA['cbr_prb'][self.id]:
@@ -397,15 +406,18 @@ class SliceRANeMBB:
                 self.state[i] = np.percentile(all_val, 95) if len(all_val) > 0 else 0
             elif var == '5th_cbr_th':
                 for j, ue in enumerate(self.info['cbr_th'].keys()):
-                    all_val[j] = self.info['cbr_th'][ue] 
+                    cur_time = self.ue_time[ue] / self.slots_per_step
+                    all_val[j] = self.info['cbr_th'][ue] / cur_time
                 self.state[i] = np.percentile(all_val, 5) if len(all_val) > 0 else 0
             elif var == '50th_cbr_th':
                 for j, ue in enumerate(self.info['cbr_th'].keys()):
-                    all_val[j] = self.info['cbr_th'][ue] 
+                    cur_time = self.ue_time[ue] / self.slots_per_step
+                    all_val[j] = self.info['cbr_th'][ue] / cur_time
                 self.state[i] = np.percentile(all_val, 50) if len(all_val) > 0 else 0
             elif var == 'std_cbr_th':
                 for j, ue in enumerate(self.info['cbr_th'].keys()):
-                    all_val[j] = self.info['cbr_th'][ue] 
+                    cur_time = self.ue_time[ue] / self.slots_per_step
+                    all_val[j] = self.info['cbr_th'][ue] / cur_time
                 self.state[i] = np.std(all_val) if len(all_val) > 0 else 0
             else: # average along ues
                 for j, ue in enumerate(self.info[var].keys()):

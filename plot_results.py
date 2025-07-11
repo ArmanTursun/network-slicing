@@ -9,8 +9,10 @@ Created on 5, June 2025
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+import seaborn as sns
 import os
 import sys
+import pandas as pd
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
 import matplotlib.cm as cm
@@ -19,7 +21,7 @@ import matplotlib.cm as cm
 # trainning results
 WINDOW = 100 #400
 START = 0
-END =  1000 # up to 39900  20000
+END =  10000 # up to 39900  20000
 SAFESET = True
 #algo_names = ['A2C', 'PPO1', 'PPO2', 'TRPO', 'SAC', 'TD3', 'NAF', 'KBRL_97','KBRL_99']
 #labels = ['A2C', 'PPO1', 'PPO2', 'TRPO', 'SAC', 'TD3', 'NAF', 'KBRL 0.97', 'KBRL 0.99']
@@ -82,6 +84,7 @@ if __name__=='__main__':
         scenario = 0
 
     dir_path = './results/scenario_{}/'.format(scenario)
+    #dir_path = './results/#scenario_{}_QR_margin_self-learn_best/'.format(scenario)
     algo_names = get_folder_names(dir_path)
     algo_names.sort()
     #algo_names = get_names()
@@ -96,6 +99,7 @@ if __name__=='__main__':
     prbs = prbs_values[scenario]
 
     save_path = './results/scenario_{}/subplots_wkblr'.format(scenario)
+    #save_path = './results/#scenario_{}_QR_margin_self-learn_best/subplots_wkblr'.format(scenario)
 
     # Generate distinct colors from a colormap
     color_list = plt.cm.tab10.colors  # up to 10 distinct colors; you can also use tab20, Set3, etc.
@@ -108,6 +112,8 @@ if __name__=='__main__':
     else:
         fig, axs = plt.subplots(nrows=1, ncols=5, figsize=(25, 6), constrained_layout=False)
     fig.subplots_adjust(top=0.80)
+    colors = []
+    plot_data = []
     # iterate over algorithms
     for algo, label in zip(algo_names, labels):
         violations = np.empty([1])
@@ -118,6 +124,7 @@ if __name__=='__main__':
         data = False
         proposal = False
         path = './results/scenario_{}/{}/'.format(scenario, algo)
+        #path = './results/#scenario_{}_QR_margin_self-learn_best/{}/'.format(scenario, algo)
         runs = 0
         has_safe_set = False
         has_ues = False
@@ -131,7 +138,13 @@ if __name__=='__main__':
                 histories = np.load(path + filename, allow_pickle=True)
 
                 _violations = histories['violation']
-                _violations = np.array([np.sum(r) for r in _violations], dtype=np.int16)
+                if label != 'KBRL':
+                    #for r in _violations:
+                    #    if np.sum(r) > 1:
+                    #        print(r)
+                    _violations = np.array([np.sum(r) for r in _violations], dtype=np.int16)
+                else:
+                    _violations = np.array([np.sum(r) for r in _violations], dtype=np.int16)
                 _resources = histories['resources']
                 _rewards = histories['reward']
                 if 'ue' in histories:
@@ -155,10 +168,10 @@ if __name__=='__main__':
                 if not data:
                     violations = movingaverage(_violations, WINDOW)
                     regret = movingaverage(_violations.cumsum(), WINDOW)
-                    actions = movingaverage(_resources, WINDOW)
+                    actions = movingaverage(_resources, WINDOW/WINDOW)
                     rewards = movingaverage(_rewards.cumsum(), WINDOW)
                     if has_ues:
-                        ue = movingaverage(_ue, WINDOW)
+                        ue = movingaverage(_ue, WINDOW/WINDOW)
                     if 'safe set' in histories:
                         safe_set = movingaverage(_safe_set, WINDOW)
                     if proposal:
@@ -168,10 +181,10 @@ if __name__=='__main__':
                 else: # store the history of each run
                     violations = np.vstack((violations, movingaverage(_violations, WINDOW)))
                     regret = np.vstack((regret, movingaverage(_violations.cumsum(), WINDOW)))
-                    actions = np.vstack((actions, movingaverage(_resources, WINDOW)))
+                    actions = np.vstack((actions, movingaverage(_resources, WINDOW/WINDOW)))
                     rewards = np.vstack((rewards, movingaverage(_rewards.cumsum(), WINDOW)))
                     if has_ues:
-                        ue = np.vstack((ue, movingaverage(_ue, WINDOW)))
+                        ue = np.vstack((ue, movingaverage(_ue, WINDOW/WINDOW)))
                     if 'safe set' in histories:
                         safe_set = np.vstack((safe_set, movingaverage(_safe_set, WINDOW)))
                     if proposal:
@@ -221,94 +234,158 @@ if __name__=='__main__':
         if proposal:
             accuracy_mean = np.mean(accuracy, axis=0)
             accuracy_std = np.std(accuracy, axis=0)
-
+        
+        '''
         # plot results
         steps = np.arange(len(actions_mean[0:SPAN]))
-
-        axs[action_idx].set_title('Resource allocation', fontsize=14)
+        axs[action_idx].set_title('Resource allocation', fontsize=18)
         axs[action_idx].plot(steps, actions_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
-        #axs[action_idx].fill_between(steps, actions_min, actions_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
         axs[action_idx].fill_between(steps, actions_mean[0:SPAN] - 1.697 * actions_std[0:SPAN] / np.sqrt(runs), 
                         actions_mean[0:SPAN] + 1.697 * actions_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
             axs[action_idx].set_ylim((0,prbs))
             axs[action_idx].set_yticks(np.arange(0, prbs+1, 10))
-            axs[action_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-            axs[action_idx].set_ylabel('PRBs', fontsize=14)
-            axs[action_idx].legend(loc='best', fontsize=14)
+            axs[action_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            axs[action_idx].set_ylabel('PRBs', fontsize=18)
+            axs[action_idx].legend(loc='best', fontsize=18)
             axs[action_idx].grid()
+        '''
+        avg_per_run = actions.mean(axis=1)  # Assume actions_dict[algo] is (30, T)
+        #avg_per_run = actions_mean
+    
+        if label != 'KBRL':
+            avg_per_run = sorted(avg_per_run)[:10]  # Take best 15 runs
+        for val in avg_per_run:
+            plot_data.append({'Algorithm': label, 'PRBs': val})
 
-        axs[violations_idx].set_title('SLA violations', fontsize=14)
+        colors.append(color_map[algo])
+        if algo == algo_names[-1]:
+            df = pd.DataFrame(plot_data)
+            # Plot with seaborn violinplot on the given subplot
+            #sns.violinplot(data=df, x='Algorithm', y='PRBs', ax=axs[action_idx],
+            #            palette=[color_map[algo] for algo in algo_names],
+            #            inner='quartile', cut=0)
+            sns.violinplot(
+                data=df,
+                x='Algorithm',
+                y='PRBs',
+                hue='Algorithm',  # same as x
+                palette=[color_map[algo] for algo in algo_names],
+                ax=axs[action_idx],
+                density_norm='width',
+                native_scale=True,
+                width=0.5,
+                saturation=1,
+                #bw=0.2,
+                #bw_adjust=1,
+                #inner='quartile',
+                cut=3,
+                legend=False  # or remove legend after
+            )
+
+            # Disable automatic legend (optional but clean)
+            #axs[action_idx].get_legend().remove()
+            # Customize subplot
+            axs[action_idx].set_yticks(np.arange(0, prbs+1, 10))
+            axs[action_idx].set_xticks(np.arange(0, len(labels)), labels)
+            axs[action_idx].tick_params(axis='x', labelsize=18)
+            axs[action_idx].tick_params(axis='y', labelsize=18)
+            axs[action_idx].set_xlabel('Algorithm', fontsize=18)
+            axs[action_idx].set_ylabel('PRBs', fontsize=18)
+            axs[action_idx].set_title('Resource allocation', fontsize=18)
+        
+        steps = np.arange(len(violations_mean[0:SPAN]))
+        axs[violations_idx].set_title('SLA violations', fontsize=18)
         axs[violations_idx].plot(steps, violations_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
         #axs[violations_idx].fill_between(steps, violations_min, violations_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) #, color = '#DDDDDD'
         axs[violations_idx].fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
                         violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
-            axs[violations_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-            axs[violations_idx].set_ylabel('SLA violations', fontsize=14)
-            axs[violations_idx].set_ylim((0, 0.2))
-            axs[violations_idx].set_yticks(np.arange(0, 0.21, 0.02))
-            axs[violations_idx].legend(loc='best', fontsize=14)
+            axs[violations_idx].axhline(y=0.01, color='black', linestyle='--', linewidth=2, label='99% SLA')
+            axs[violations_idx].axhline(y=0.05, color='gray', linestyle='--', linewidth=2, label='95% SLA')
+            axs[violations_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            axs[violations_idx].set_ylabel('SLA violations', fontsize=18)
+            axs[violations_idx].set_ylim((0, 0.1))
+            axs[violations_idx].set_yticks(np.arange(0, 0.11, 0.01))
+            axs[violations_idx].set_xticks(np.arange(0, 10001, 2000))
+            axs[violations_idx].tick_params(axis='x', labelsize=18)
+            axs[violations_idx].tick_params(axis='y', labelsize=18)
+            axs[violations_idx].legend(loc='best', fontsize=18)
             axs[violations_idx].grid()
         
-        axs[rewards_idx].set_title('Rewards', fontsize=14)
+        steps = np.arange(len(rewards_mean[0:SPAN]))
+        axs[rewards_idx].set_title('Rewards', fontsize=18)
         axs[rewards_idx].plot(steps, rewards_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
         #axs[rewards_idx].fill_between(steps, rewards_min, rewards_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
         axs[rewards_idx].fill_between(steps, rewards_mean[0:SPAN] - 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), 
                         rewards_mean[0:SPAN] + 1.697 * rewards_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
-            axs[rewards_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-            axs[rewards_idx].set_ylabel('Reward', fontsize=14)
-            axs[rewards_idx].set_ylim((0,900000)) # 15000
-            axs[rewards_idx].set_yticks(np.arange(0, 900001, 100000))
-            axs[rewards_idx].legend(loc='best', fontsize=14)
+            axs[rewards_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            axs[rewards_idx].set_ylabel('Reward', fontsize=18)
+            axs[rewards_idx].set_ylim((0,600000)) # 15000
+            axs[rewards_idx].set_yticks(np.arange(0, 600001, 50000))
+            axs[rewards_idx].set_xticks(np.arange(0, 10001, 2000))
+            axs[rewards_idx].tick_params(axis='x', labelsize=18)
+            axs[rewards_idx].tick_params(axis='y', labelsize=18)
+            axs[rewards_idx].legend(loc='best', fontsize=18)
             axs[rewards_idx].grid()
 
-        axs[regret_idx].set_title('Cumulative SLA violations', fontsize=14)
+        steps = np.arange(len(regret_mean[0:SPAN]))
+        axs[regret_idx].set_title('Cumulative SLA violations', fontsize=18)
         axs[regret_idx].plot(steps, regret_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
         #axs[regret_idx].fill_between(steps, regret_min, regret_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
         axs[regret_idx].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
                         regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
-            axs[regret_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-            axs[regret_idx].set_ylabel('cumulative SLA violations', fontsize=14)
-            axs[regret_idx].set_ylim((0,50)) # 15000
-            axs[regret_idx].set_yticks(np.arange(0, 51, 5))
-            axs[regret_idx].legend(loc='best', fontsize=14)
+            axs[regret_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            axs[regret_idx].set_ylabel('cumulative SLA violations', fontsize=18)
+            axs[regret_idx].set_ylim((0,40)) # 15000
+            axs[regret_idx].set_yticks(np.arange(0, 41, 5))
+            axs[regret_idx].set_xticks(np.arange(0, 10001, 2000))
+            axs[regret_idx].tick_params(axis='x', labelsize=18)
+            axs[regret_idx].tick_params(axis='y', labelsize=18)
+            axs[regret_idx].legend(loc='best', fontsize=18)
             axs[regret_idx].grid() 
 
         if has_ues:
-            axs[ue_idx].set_title('Number of UEs', fontsize=14)
-            axs[ue_idx].plot(steps, ue_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
+            ue_steps = np.arange(len(ue_mean[0:SPAN]))
+            axs[ue_idx].set_title('Number of UEs', fontsize=18)
+            axs[ue_idx].plot(ue_steps, ue_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
             #axs[ue_idx].fill_between(steps, regret_min, regret_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
-            axs[ue_idx].fill_between(steps, ue_mean[0:SPAN] - 1.697 * ue_std[0:SPAN] / np.sqrt(runs), 
+            axs[ue_idx].fill_between(ue_steps, ue_mean[0:SPAN] - 1.697 * ue_std[0:SPAN] / np.sqrt(runs), 
                             ue_mean[0:SPAN] + 1.697 * ue_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                             alpha=0.3, label='_nolegend_')
             if algo == algo_names[-1]:
-                axs[ue_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-                axs[ue_idx].set_ylabel('number of UEs', fontsize=14)
+                axs[ue_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+                axs[ue_idx].set_ylabel('number of UEs', fontsize=18)
                 axs[ue_idx].set_ylim((0,10)) # 15000
                 axs[ue_idx].set_yticks(np.arange(0, 11, 1))
-                axs[ue_idx].legend(loc='best', fontsize=14)
+                axs[ue_idx].set_xticks(np.arange(0, 10001, 2000))
+                axs[ue_idx].tick_params(axis='x', labelsize=18)
+                axs[ue_idx].tick_params(axis='y', labelsize=18)
+                axs[ue_idx].legend(loc='best', fontsize=18)
                 axs[ue_idx].grid()      
 
         if has_safe_set:
-            axs[safe_set_idx].set_title('Safe Set', fontsize=14)
+            axs[safe_set_idx].set_title('Safe Set', fontsize=18)
             axs[safe_set_idx].plot(steps, safe_set_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
             #axs[safe_set_idx].fill_between(steps, safe_set_min, safe_set_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
             axs[safe_set_idx].fill_between(steps, safe_set_mean[0:SPAN] - 1.697 * safe_set_std[0:SPAN] / np.sqrt(runs), 
                             safe_set_mean[0:SPAN] + 1.697 * safe_set_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
             if algo == algo_names[-1]:
-                axs[safe_set_idx].set_xlabel('Step', fontsize=14)  # Add an x-label to the axes.
-                axs[safe_set_idx].set_ylabel('safe set', fontsize=14)
+                axs[safe_set_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+                axs[safe_set_idx].set_ylabel('safe set', fontsize=18)
                 axs[safe_set_idx].set_ylim((0,40)) # 15000
                 axs[safe_set_idx].set_yticks(np.arange(0, 41, 5))
-                axs[safe_set_idx].legend(loc='best', fontsize=14)
+                axs[safe_set_idx].set_xticks(np.arange(0, 10001, 2000))
+                axs[safe_set_idx].tick_params(axis='x', labelsize=18)
+                axs[safe_set_idx].tick_params(axis='y', labelsize=18)
+                axs[safe_set_idx].legend(loc='best', fontsize=18)
                 axs[safe_set_idx].grid()   
 
                 # Add zoom-in inset
@@ -331,7 +408,7 @@ if __name__=='__main__':
             elif len(labels) > 6:
                 ncol = math.ceil(len(labels) / 2)
             
-            fig.legend(labels, loc='upper center', ncol=ncol, bbox_to_anchor=(0.35, 1.0), frameon=True, fontsize=14)
+            fig.legend(labels, loc='upper center', ncol=ncol, bbox_to_anchor=(0.35, 1.0), frameon=True, fontsize=18)
             fig.tight_layout(rect=[0, 0, 1, 0.95])
 
             if START > 0:

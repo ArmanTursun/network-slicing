@@ -12,7 +12,7 @@ from itertools import count
 from node_b import NodeB
 from slice_l1 import SliceL1eMBB, SliceL1mMTC
 from slice_ran_gbr import SliceRANmMTC, SliceRANeMBB
-from schedulers import ProportionalFair
+from schedulers import ProportionalFair, ProportionalFair_PowerSpreading
 from channel_models import SINRSelectiveFading, MCSCodeset, SNRGenerator
 
 
@@ -28,12 +28,12 @@ scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
 CBR_description = { # GBR traffic
 #    'lambda': 1.0/60.0, # low traffic
-    'lambda': 1.0/120.0, # UE arrivals: Poisson process with arrival rate = 2 users / min
+    'lambda': 1.0/60.0, # UE arrivals: Poisson process with arrival rate = 2 users / min
     't_mean': 60.0, # UE connection time: Exponentially distributed with mean = 30 secs
-    'bit_rate': [0.6e6, 1.1e6, 1.6e6] # slightly larger than SLA
+    'bit_rate': [0.6e6, 0.6e6, 1.6e6] # slightly larger than SLA
 }
 
-state_variables_embb = ['5th_cbr_th', 'cbr_prb', 'cbr_queue', 'cbr_snr', 'cbr_ue'] # , 'cbr_queue' , 'cbr_prb', '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb'
+state_variables_embb = ['5th_cbr_th', 'cbr_queue', 'cbr_snr', 'cbr_ue'] # , 'cbr_queue' , 'cbr_prb', '50th_cbr_th', 'std_cbr_th', 'fair_cbr_prb', 'starve_cbr_prb' , 'cbr_prb'
 
 # -------------------- mMTC parameters -------------------------
 # packet size 1000 bits
@@ -68,12 +68,12 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50,
     # -------------------- eMBB normalization constants ----------------------
 
     norm_const_embb = { # average in each step
-        'cbr_traffic': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step], # total traffic each step
-        'cbr_th': [2e6 * time_per_step, 2e6 * time_per_step, 2e6 * time_per_step],
+        'cbr_traffic': [0.75e6 * time_per_step, 0.75e6 * time_per_step, 1.25e6 * time_per_step],
+        'cbr_th': [0.75e6 * time_per_step, 0.75e6 * time_per_step, 1.256 * time_per_step],
         'cbr_prb': n_prbs * slots_per_step, # total prb each step
         'cbr_queue': 10e4 * slots_per_step,
         'cbr_snr': 35 * slots_per_step,
-        'cbr_ue': 20
+        'cbr_ue': 10
     }
 
     # -------------------- mMTC normalization constants -----------------------
@@ -85,7 +85,7 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50,
     }
 
     SLA_embb = { # overall
-    'cbr_th': [0.5e6  * time_per_step / norm_const_embb['cbr_th'][0], 1e6  * time_per_step / norm_const_embb['cbr_th'][1], 1.5e6  * time_per_step / norm_const_embb['cbr_th'][2]], # normed total throughput of slice each step?
+    'cbr_th': [0.5e6  * time_per_step / norm_const_embb['cbr_th'][0], 0.5e6  * time_per_step / norm_const_embb['cbr_th'][1], 1e6  * time_per_step / norm_const_embb['cbr_th'][2]], # normed total throughput of slice each step?
     'cbr_prb': [15  * slots_per_step / norm_const_embb['cbr_prb'], 20  * slots_per_step / norm_const_embb['cbr_prb'], 35  * slots_per_step / norm_const_embb['cbr_prb']], # normed average 30  GBR authorized capacity 20 RBs/subframe
     'cbr_queue': 10e4 * slots_per_step / norm_const_embb['cbr_queue'], # normed average 5e4 Maximum average queue per GBR user: 100Kbit/UE
     'vbr_th': 10e4, # 10e6  # total throughput of slice ?
@@ -109,6 +109,7 @@ def create_env(rng, all_scenarios = scenarios, n = 0, slots_per_step = 50,
     mcs_codeset = MCSCodeset()
 
     scheduler = ProportionalFair(mcs_codeset)
+    #scheduler = ProportionalFair_PowerSpreading(mcs_codeset)
 
     user_counter = count()
 

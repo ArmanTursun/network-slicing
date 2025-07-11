@@ -29,7 +29,7 @@ scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
-RUNS = 10
+RUNS = 30
 PROCESSES = 10 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
@@ -37,7 +37,7 @@ PENALTY = 10
 VERBOSE = True
 SLOT_PER_STEP = 100
 STEPS_PER_UPDATE = 50
-EPOCH = 20
+EPOCH = 200
 TRAIN_STEPS = STEPS_PER_UPDATE * EPOCH
 
 run_list = list(range(RUNS))

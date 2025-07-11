@@ -216,16 +216,12 @@ class SliceL1eMBB:
                 try:
                     #ue.estimate_snr(snr[self.prb_slice])
                     ue.estimate_snr(snr)
-                    #snrs.append(ue.e_snr)
                 except:
                     print('problem with snr estimation!')
                     print('prb_slice = {}'.format(self.prb_slice))
                     print('snr vector = {}'.format(snr[self.prb_slice]))
-        #print(snrs)
-        #ps = []
         if queued_data > 0 and self.n_prbs > 0:
             # scheduling
-            #error_bound = np.random.uniform(0.1, 0.5)
             error_bound = 0.1
             self.scheduler.allocate(self.ues, self.n_prbs, error_bound = error_bound)
             for ue in self.ues:
@@ -233,13 +229,43 @@ class SliceL1eMBB:
                 received = False
                 if ue.prbs:
                     received = self.rng.random() < ue.p
-                    #print(ue.p)
-                    #received = True # asuume all data is succefully received
-                #ps.append(ue.p)
                 ue.transmission_step(received)
-        #print(ps)
-        # update slice_ran info
-        #ue_bits = [ue.bits for ue in self.ues]
-        #print(ue_bits)
+        for slice_ran in self.slices_ran:
+            slice_ran.update_info()
+
+    def _slot(self):
+        # generate arrivals and departures for each slice ran
+        for slice_ran in self.slices_ran:
+            arrivals, departures = slice_ran.slot()
+            self.extract_users(departures)
+            self.add_users(arrivals)
+
+        queued_data = 0
+        ue_snr_map = {}
+        for ue in self.ues:
+            # data arrival
+            ue.traffic_step()
+            # update queued_data
+            queued_data += ue.queue
+            if self.n_prbs > 0:
+                # Get the raw SNR vector for the PRBs in this L1 slice
+                full_snr_vector = self.snr_generator.get_snr(ue.id)
+                ue_snr_map[ue.id] = full_snr_vector[self.prb_slice]
+        
+        if queued_data > 0 and self.n_prbs > 0:
+            # scheduling
+            error_bound = 0.1
+            # Pass the raw SNR data to the new scheduler
+            self.scheduler.allocate(self.ues, self.n_prbs, ue_snr_map, error_bound = error_bound)
+            
+            for ue in self.ues:
+                # transmission and ue update
+                received = False
+                if ue.prbs:
+                    # The new scheduler assumes p=1 for simplicity, but a more complex
+                    # model could be used here based on the final effective SINRs.
+                    received = self.rng.random() < ue.p
+                ue.transmission_step(received)
+                
         for slice_ran in self.slices_ran:
             slice_ran.update_info()

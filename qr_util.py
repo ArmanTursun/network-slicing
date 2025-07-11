@@ -146,6 +146,8 @@ class KernelizedOnlineQuantileRegressor:
         if error > 0:
             # Standard under-prediction update
             gradient_update = self.learning_rate * self.quantile
+            #if y_true >= sla_threshold and prediction < sla_threshold:
+            #    gradient_update *= (self.gradient_penalty / 5) 
         else:
             # Standard over-prediction update
             gradient_update = -self.learning_rate * (1 - self.quantile)
@@ -163,3 +165,6 @@ class KernelizedOnlineQuantileRegressor:
         # The outcome is not real, so we store a placeholder
         placeholder_outcome = -1.0 
         self.sv.add_support_vector(x, penalty_coefficient, placeholder_outcome)
+    
+    def set_quantile(self, new_quantile):
+        self.quantile = new_quantile

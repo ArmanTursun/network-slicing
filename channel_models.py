@@ -166,7 +166,7 @@ class SINRSelectiveFading:
         
         while True:
             index = self.rng.integers(n_samples)
-            step = self.rng.choice([0]) # stay still, if moving then [-1,1]
+            step = self.rng.choice([-1, 0, 1]) # stay still, if moving then [-1,1]
             sinr = self.nominal_sinr.generate()
             self.users[user_id] = {'fading_type': fading_type, 'original_index': index, 'index': index, 'step': step, 'nominal_sinr': sinr, 'n_samples': n_samples}
             f = self.users[user_id]['fading_type']
@@ -201,7 +201,7 @@ class SINRSelectiveFading:
             if self.users[user_id]['index'] >= self.users[user_id]['n_samples'] or self.users[user_id]['index'] < 0:
                 #self.users[user_id]['index'] = self.rng.integers(self.users[user_id]['n_samples'])
                 self.users[user_id]['index'] = self.users[user_id]['original_index']
-                self.users[user_id]['step'] = self.rng.choice([0]) # stay still, if moving then [-1,1]
+                self.users[user_id]['step'] = self.rng.choice([-1, 0, 1]) # stay still, if moving then [-1,1]
                 #self.users[user_id]['step'] *= -1      
             
             f = self.users[user_id]['fading_type']
@@ -290,6 +290,7 @@ class MCSCodeset:
         self.MIparameters = {'qpsk': [-0.25040431, 0.31591749],
                              '16qam': [5.12440916, 0.25423209],
                              '64qam': [9.16962738, 0.22298101]}
+        self.table = np.column_stack((np.arange(self.n_mcs), self.rate * self.order, self.snr))
     
     def compute_factors(self, Delta):
         # fits the factors A, B in rx_ptob(x) = A *(snr - snr_ref) + B
@@ -315,6 +316,20 @@ class MCSCodeset:
             if self.estimate_rx_prob(mcs, snr) < rx_prob:
                 return max(mcs-1, 0), self.rate[mcs] * self.order[mcs]
         return mcs, self.rate[mcs] * self.order[mcs]
+    
+    def get_bits_from_sinr(self, sinr_linear):
+        """
+        Finds the highest spectral efficiency (bits/symbol) for a given linear SINR.
+        This is a helper method that uses the logic from mcs_rate_vs_error.
+        """
+        if sinr_linear <= 0:
+            return 0
+            
+        # We can reuse the logic from your mcs_rate_vs_error method.
+        # It finds the highest MCS that meets an error bound (e.g., 10% error).
+        # We assume error_upper_bound = 0.1, as is common.
+        _mcs, bits_per_symbol = self.mcs_rate_vs_error(snr=sinr_linear, error_upper_bound=0.1)
+        return bits_per_symbol
 
     def response(self, mcs, snr):
         # returns the response of the channel for a given MCS
@@ -340,6 +355,18 @@ class MCSCodeset:
 
     def nominal_rate(self, mcs):
         return self.rate[mcs] * self.order[mcs]
+    
+    def get_mcs_from_rate(self, bits_per_symbol):
+        """Finds the MCS index corresponding to a given spectral efficiency."""
+        if bits_per_symbol <= 0:
+            return 0
+            
+        # Find the difference between the target rate and all rates in the table
+        rate_diff = np.abs(self.table[:, 1] - bits_per_symbol)
+        
+        # Return the index of the MCS with the smallest difference
+        return np.argmin(rate_diff)
+
 
 
 if __name__ == '__main__':
