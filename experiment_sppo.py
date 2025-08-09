@@ -34,8 +34,8 @@ scenario_3 = { 'n_prbs': 100, 'n_embb': 1, 'n_mmtc': 4}
 scenario_4 = { 'n_prbs': 70,  'n_embb': 1, 'n_mmtc': 1}
 all_scenarios = [scenario_1, scenario_2, scenario_3, scenario_4]
 
-RUNS = 3
-PROCESSES = 8 # 30 if enough threads 
+RUNS = 10
+PROCESSES = 10 # 30 if enough threads 
 TRAIN_STEPS = 1 #10240 # must be a multiple of 256  #39936
 CONTROL_STEPS = 60000 # 60000
 PENALTY = 10
@@ -198,12 +198,12 @@ if __name__=='__main__':
                         evaluator = RLEvaluator(scenario, alg_name, alg, safety_params, radius_params, noise_params, beta_params)
                         # ################################################################
                         # # use this code for sequential execution
-                        for run in run_list:
-                            evaluator.evaluate(run)
+                        #for run in run_list:
+                        #    evaluator.evaluate(run)
                         # ################################################################
 
                         # ################################################################
                         # use this code for parallel execution
-                        #with cf.ProcessPoolExecutor(PROCESSES) as E:
-                        #    results = E.map(evaluator.evaluate, run_list)
+                        with cf.ProcessPoolExecutor(PROCESSES) as E:
+                            results = E.map(evaluator.evaluate, run_list)
                         # ################################################################

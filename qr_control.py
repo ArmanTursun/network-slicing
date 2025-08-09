@@ -53,109 +53,6 @@ class QR_Control:
         self.target_sla_success_rate = [0.99 for h in learners] # The business goal (e.g., 99%)
         self.current_quantiles = [h.algorithm.quantile for h in learners]
 
-    def select_action_(self, enriched_state_dict):
-        """
-        Implements a hierarchical, risk-averse action selection strategy for the DQRNN.
-        1.  Efficiently finds the best safe action using a single loop.
-        2.  If no safe action is found, uses a robust epsilon-greedy + efficiency-seeking fallback.
-        """
-
-        intended_action = np.zeros(self.n_slices, dtype=np.int16)
-        final_uncertainties = np.zeros(self.n_slices, dtype=np.float64)
-        temp_predictions = np.zeros(self.n_slices, dtype=np.float64)
-        temp_thresholds = np.zeros(self.n_slices, dtype=np.float64)
-        self.len_safe_set = [0, 0, 0]
-        self.choices = [None for _ in self.learners]
-
-        for i, h in enumerate(self.learners):
-            l1_state = enriched_state_dict[i]
-
-            # --- Rule for inactive slices ---
-            # If no UEs, set action to 0 and skip calculations.
-            ue_index = self.state_variables_embb.index('cbr_ue')
-            # Only apply after a brief "warm-up" period.
-            if l1_state[ue_index] == 0:
-                intended_action[i] = 0
-                final_uncertainties[i] = 0
-                self.len_safe_set[i] = 0
-                self.choices[i] = 'safe'
-                continue
-
-            # --- Stage 1 & 2 Combined: Efficiently Find the Best Safe Action ---
-            safe_actions = []
-            best_prediction = -np.inf
-            best_fallback_action = 0
-            best_fallback_uncertainty = 1
-            best_safe_score = -np.inf
-            best_safe_action = 0
-            best_safe_action_uncertainty = 1
-            best_action_for_slice = 0
-            best_action_uncertainty = 1
-            for a in range(self.n_prbs + 1):
-                x = np.append(l1_state, a / self.n_prbs)
-                prediction, uncertainty = h.algorithm.predict_with_uncertainty(x)
-                if prediction > best_prediction:
-                    best_prediction = prediction
-                    best_fallback_action = a     
-                    best_fallback_uncertainty = uncertainty
-                    temp_predictions[i] = prediction
-                    temp_thresholds[i] = uncertainty
-                    
-                is_safe = False
-                if h.constraint_type == 'lower' and prediction >= h.sla_threshold:
-                    is_safe = True
-                elif h.constraint_type == 'upper' and prediction <= h.sla_threshold:
-                    is_safe = True
-                if is_safe:
-                    safe_actions.append((a, uncertainty))
-                    optimistic_score = prediction + self.exploration_factor * uncertainty
-                    resource_penalty = self.resource_cost_factor * (a / self.n_prbs)
-                    final_score = optimistic_score - resource_penalty
-                    if final_score > best_safe_score:
-                        best_safe_score = final_score
-                        best_safe_action = a
-                        best_safe_action_uncertainty = uncertainty
-            
-            self.len_safe_set[i] = len(safe_actions)
-
-            # --- Stage 3: Decide Action Based on Confidence ---
-            if safe_actions:
-                # --- PRIMARY STRATEGY: A safe action was found. ---
-                #best_action_for_slice = best_safe_action
-                #best_action_uncertainty = best_safe_action_uncertainty
-                best_action_for_slice, best_action_uncertainty = safe_actions[0]
-                self.choices[i] = 'safe'
-            else:
-                # --- FALLBACK STRATEGY: The safe set is empty. ---
-                # Tier 1: Epsilon-Greedy for guaranteed exploration.
-                if self.rng.random() < self.epsilon:
-                    best_action_for_slice = self.rng.integers(0, self.n_prbs + 1)
-                    #best_action_for_slice = self.rng.integers(2, best_fallback_action + 1)
-                    best_action_uncertainty = 1
-                    self.choices[i] = 'random'
-                else:
-                    # Tier 2: "Efficiency-Seeking" educated guess.
-                    # Use the full model to find the action with the best tradeoff
-                    # between predicted performance and resource cost.
-                    best_action_for_slice = best_fallback_action
-                    best_action_uncertainty = best_fallback_uncertainty
-                    self.choices[i] = 'fallback'
-            
-            intended_action[i] = best_action_for_slice
-            final_uncertainties[i] = best_action_uncertainty
-    
-        # Adjust actions if total allocation exceeds system capacity
-        assigned_prbs = intended_action.sum()
-        final_action = intended_action
-        if assigned_prbs > self.n_prbs:
-            self.adjusted = 1
-            final_action = self.adjust_action(intended_action, assigned_prbs)
-        else:
-            self.adjusted = 0
-        
-        self.action = final_action
-        #print(self.choices, temp_predictions, temp_thresholds) # , temp_predictions, temp_thresholds
-        return final_action, intended_action, final_uncertainties
     
     # --- FINAL, DEFINITIVE select_action method in QRF_Control class ---
 
@@ -208,7 +105,7 @@ class QR_Control:
             for a in range(1, self.n_prbs + 1):
                 x = np.append(l1_state, a / self.n_prbs)
                 prediction, uncertainty = h.algorithm.predict_with_uncertainty(x)
-                random_scores[a] = prediction - uncertainty #- (a / self.n_prbs) #+ ((self.n_prbs - a) / self.n_prbs) # c
+                random_scores[a] = prediction - uncertainty
                 random_uncertainties[a] = uncertainty
                 if prediction > best_prediction: #  - uncertainty
                     best_prediction = prediction #- uncertainty
@@ -241,12 +138,9 @@ class QR_Control:
                     margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
                     self.choices[i] = 'random'
                 elif self.rng.random() < self.epsilon:
-                    #best_action_for_slice = self.rng.integers(0, best_fallback_action + 1)
-                    #best_action_uncertainty = 1
                     probabilities = self.softmax(random_scores)
                     best_action_for_slice = self.rng.choice(all_actions, p=probabilities)
                     best_action_uncertainty = 1
-                    #best_action_uncertainty = random_uncertainties[best_action_for_slice] #if best_action_for_slice > 0 else 1
                     margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
                     self.choices[i] = 'random'
                 else:
@@ -272,24 +166,11 @@ class QR_Control:
 
                         if np.any(successful_mask):
                             successful_actions_normalized = relevant_actions[k_nearest_indices][successful_mask]
-                            successful_outcomes_normalized = relevant_outcomes[k_nearest_indices][successful_mask]
-                            #successful_probabilities = self.softmax(successful_actions_normalized)
-                            #chosen_action_normalized = self.rng.choice(successful_actions_normalized, p=successful_probabilities)
-                            #successful_action_length = len(successful_actions_normalized)
-                            #successful_scores = np.zeros(successful_action_length, dtype=np.float64)
-                            #successful_scores = successful_outcomes_normalized - successful_actions_normalized
-                            #for idx in range(successful_actions_normalized):
-                            #    successful_scores[idx] = successful_outcomes_normalized[idx] - successful_actions_normalized[idx]
-                            #chosen_action_normalized = self.rng.choice(successful_actions_normalized)
                             chosen_action_normalized = np.max(successful_actions_normalized)
-                            #chosen_action_normalized = successful_actions_normalized[np.argmax(successful_outcomes_normalized)]
-                            #chosen_action_normalized = successful_actions_normalized[np.argmax(successful_scores)]
                             best_action_for_slice = int(round(chosen_action_normalized * self.n_prbs))
                             x = np.append(l1_state, best_action_for_slice / self.n_prbs)
                             _, best_action_uncertainty = h.algorithm.predict_with_uncertainty(x)
-                            #best_action_uncertainty = 1
                             margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
-                            #margin_prbs = 0
                             self.choices[i] = 'knn'
                         else:
                             successful_actions_normalized = relevant_actions[k_nearest_indices]
@@ -297,39 +178,18 @@ class QR_Control:
                             best_action_for_slice = int(round(chosen_action_normalized * self.n_prbs))
                             x = np.append(l1_state, best_action_for_slice / self.n_prbs)
                             _, best_action_uncertainty = h.algorithm.predict_with_uncertainty(x)
-                            #best_action_uncertainty = 1
-                            #best_action_for_slice = best_fallback_action
-                            #best_action_uncertainty = best_fallback_uncertainty
-                            #probabilities = self.softmax(random_scores)
-                            #best_action_for_slice = self.rng.choice(all_actions, p=probabilities)
-                            #best_action_uncertainty = random_uncertainties[best_action_for_slice]
-                            #best_action_for_slice = self.rng.integers(0, best_fallback_action + 1)
-                            #best_action_uncertainty = 1
-                            #probabilities = self.softmax(random_scores)
-                            #best_action_for_slice = self.rng.choice(all_actions, p=probabilities)
-                            #best_action_uncertainty = random_uncertainties[best_action_for_slice]
                             margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
-                            #print('fallback1')
                             self.choices[i] = 'knn'
                     else:
-                        #best_action_for_slice = best_fallback_action
-                        #best_action_uncertainty = best_fallback_uncertainty
                         probabilities = self.softmax(random_scores)
                         best_action_for_slice = self.rng.choice(all_actions, p=probabilities)
-                        #best_action_uncertainty = random_uncertainties[best_action_for_slice]
                         best_action_uncertainty = 1
-                        #best_action_for_slice = self.rng.integers(0, best_fallback_action + 1)
-                        #best_action_uncertainty = 1
-                        #probabilities = self.softmax(random_scores)
-                        #best_action_for_slice = self.rng.choice(all_actions, p=probabilities)
-                        #best_action_uncertainty = random_uncertainties[best_action_for_slice]
                         margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
                         self.choices[i] = 'random'
                         #print('fallback2')
             else:
                 best_action_for_slice = best_safe_action
                 best_action_uncertainty = best_safe_action_uncertainty
-                #best_action_for_slice, best_action_uncertainty = safe_actions[0]
                 margin_prbs = int(round(best_action_uncertainty * self.margin[i]))
                 self.choices[i] = 'safe'
             best_action_with_margin_for_slice = best_action_for_slice + margin_prbs
@@ -400,29 +260,6 @@ class QR_Control:
                 l1_state = enriched_state_dict[i]
                 original_x = np.append(l1_state, original_action[i] / self.n_prbs)
                 h.algorithm.add_penalty_update(original_x, penalty_coefficient=dynamic_penalty)
-
-    def penalize_original_actions_(self, enriched_state_dict, original_action, final_action):
-        """
-        Applies a penalty to greedy learners by performing a virtual training
-        step with a fabricated bad outcome.
-        """
-        for i, h in enumerate(self.learners):
-            # Check if this learner's action was adjusted downwards
-            if self.adjusted and original_action[i] > final_action[i]:
-                
-                # 1. Get the state and original greedy action that led to the penalty
-                l1_state = enriched_state_dict[i]
-                original_x = np.append(l1_state, original_action[i] / self.n_prbs)
-                
-                # 2. Create a "fake" bad outcome.
-                #    A simple and effective choice is a value far below the SLA threshold,
-                #    for example, half of the threshold value.
-                fake_bad_outcome = h.sla_threshold / 2.0
-                
-                # 3. Perform a single training update on the DQRNN with this fake data.
-                #    This pushes the network weights to associate the greedy action
-                #    with a poor outcome.
-                h.algorithm.update(original_x, fake_bad_outcome, h.sla_threshold)
     
     def get_global_state(self, info):
         # get global info
@@ -477,8 +314,6 @@ class QR_Control:
         
         action_choices = {0: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 1: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 2: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}}
         violation_per_choice = {0: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 1: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 2: {'knn': 0, 'safe': 0, 'random': 0, 'fallback': 0}}
-        #action_choices = {0: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 1: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 2: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}}
-        #violation_per_choice = {0: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 1: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}, 2: {'zero': 0, 'safe': 0, 'random': 0, 'fallback': 0}}
 
         for i in range(steps):
             self.current_step = i
@@ -498,10 +333,7 @@ class QR_Control:
             new_state, reward, _, _, info = system.step(final_action)
             cur_violations = info.get('violations')
 
-            #'''
             # Update all learners with the new quantile for the next decision
-            #if (i + 1) % 100 == 0 and self.epsilon > 0.1:
-            #    self.epsilon -= 0.1
             for j, h in enumerate(self.learners):
                 self.violation_history[j].append(cur_violations[j])
                 if len(self.violation_history[j]) == self.violation_history[j].maxlen and (i+ 1) % 1 == 0:
@@ -523,7 +355,6 @@ class QR_Control:
                     self.current_quantiles[j] = np.clip(self.current_quantiles[j], min_quantile, max_quantile)
                     self.margin[j] = np.clip(self.margin[j], min_margin, max_margin)
                 h.algorithm.set_quantile(self.current_quantiles[j])
-            #'''
             if i < learning_cutoff:
                 # The key change: passing the full 'info' dictionary
                 self.update_control(enriched_state_dict, final_action, new_state)
@@ -543,8 +374,7 @@ class QR_Control:
                 action_choices[k][item] += 1
                 if info.get('violations')[k] > 0:
                     violation_per_choice[k][item] += 1
-            #if info.get('total_violations', 0) > 0:
-            #    print(info.get('violations'), self.choices)
+
             end = time.perf_counter()   
             duration_ms = (end - start) * 1000
             action_str = ' '.join('{:>2}'.format(a) for a in final_action)

@@ -94,7 +94,12 @@ if __name__=='__main__':
         if algo_name == 'KBRL_97':
             labels.append('KBRL')
             continue
-        labels.append(algo_name.split('_')[0] + '_' + algo_name.split('_')[-1])
+        label = algo_name.split('_')[0] + '_' + algo_name.split('_')[-1]
+        if label == 'QR_nocost':
+            label = 'SQR w/o Cost'
+        if label == 'QR_cost':
+            label = 'SQR w/ Cost'
+        labels.append(label)
     #print(algo_names)
     prbs = prbs_values[scenario]
 
@@ -112,6 +117,14 @@ if __name__=='__main__':
     else:
         fig, axs = plt.subplots(nrows=1, ncols=5, figsize=(25, 6), constrained_layout=False)
     fig.subplots_adjust(top=0.80)
+
+    fig_rb = plt.figure(figsize=(10, 6))
+    ax_rb = fig_rb.add_subplot()
+    fig_vio = plt.figure(figsize=(10, 6))
+    ax_vio = fig_vio.add_subplot()
+    fig_cumvio = plt.figure(figsize=(10, 6))
+    ax_cumvio = fig_cumvio.add_subplot()
+
     colors = []
     plot_data = []
     # iterate over algorithms
@@ -252,13 +265,10 @@ if __name__=='__main__':
             axs[action_idx].grid()
         '''
         avg_per_run = actions.mean(axis=1)  # Assume actions_dict[algo] is (30, T)
-        #avg_per_run = actions_mean
-    
         if label != 'KBRL':
             avg_per_run = sorted(avg_per_run)[:10]  # Take best 15 runs
         for val in avg_per_run:
             plot_data.append({'Algorithm': label, 'PRBs': val})
-
         colors.append(color_map[algo])
         if algo == algo_names[-1]:
             df = pd.DataFrame(plot_data)
@@ -293,13 +303,46 @@ if __name__=='__main__':
             axs[action_idx].tick_params(axis='y', labelsize=18)
             axs[action_idx].set_xlabel('Algorithm', fontsize=18)
             axs[action_idx].set_ylabel('PRBs', fontsize=18)
-            axs[action_idx].set_title('Resource allocation', fontsize=18)
+            axs[action_idx].set_title('Resource Allocation', fontsize=18)
+
+            sns.violinplot(
+                data=df,
+                x='Algorithm',
+                y='PRBs',
+                hue='Algorithm',  # same as x
+                palette=[color_map[algo] for algo in algo_names],
+                ax=ax_rb,
+                density_norm='width',
+                native_scale=True,
+                width=0.5,
+                saturation=1,
+                #bw=0.2,
+                #bw_adjust=1,
+                #inner='quartile',
+                cut=3,
+                legend=False  # or remove legend after
+            )
+            ax_rb.set_yticks(np.arange(0, prbs+1, 10))
+            ax_rb.set_xticks(np.arange(0, len(labels)), labels)
+            ax_rb.tick_params(axis='x', labelsize=18)
+            ax_rb.tick_params(axis='y', labelsize=18)
+            ax_rb.set_xlabel('Algorithm', fontsize=18)
+            ax_rb.set_ylabel('PRBs', fontsize=18)
+            #ax_rb.set_title('Resource Allocation', fontsize=18)
+            fig_rb.tight_layout()
+            fig_rb.savefig(save_path.format(scenario)+'_rb', format='png', transparent=True, dpi=300.0)
         
         steps = np.arange(len(violations_mean[0:SPAN]))
         axs[violations_idx].set_title('SLA violations', fontsize=18)
         axs[violations_idx].plot(steps, violations_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
         #axs[violations_idx].fill_between(steps, violations_min, violations_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) #, color = '#DDDDDD'
         axs[violations_idx].fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
+                        violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
+        #ax_vio.set_title('SLA violations', fontsize=18)
+        ax_vio.plot(steps, violations_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
+        #axs[violations_idx].fill_between(steps, violations_min, violations_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) #, color = '#DDDDDD'
+        ax_vio.fill_between(steps, violations_mean[0:SPAN] - 1.697 * violations_std[0:SPAN] / np.sqrt(runs), 
                         violations_mean[0:SPAN] + 1.697 * violations_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
@@ -314,6 +357,21 @@ if __name__=='__main__':
             axs[violations_idx].tick_params(axis='y', labelsize=18)
             axs[violations_idx].legend(loc='best', fontsize=18)
             axs[violations_idx].grid()
+
+            ax_vio.axhline(y=0.01, color='black', linestyle='--', linewidth=2, label='99% SLA')
+            ax_vio.axhline(y=0.05, color='gray', linestyle='--', linewidth=2, label='95% SLA')
+            ax_vio.axvline(x=2000, color='red', linestyle='--', linewidth=2, label='Full Budget')
+            ax_vio.set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            ax_vio.set_ylabel('SLA violations', fontsize=18)
+            ax_vio.set_ylim((0, 0.1))
+            ax_vio.set_yticks(np.arange(0, 0.11, 0.01))
+            ax_vio.set_xticks(np.arange(0, 10001, 2000))
+            ax_vio.tick_params(axis='x', labelsize=18)
+            ax_vio.tick_params(axis='y', labelsize=18)
+            ax_vio.legend(loc='best', fontsize=18)
+            ax_vio.grid()
+            fig_vio.tight_layout()
+            fig_vio.savefig(save_path.format(scenario)+'_vio', format='png', transparent=True, dpi=300.0)
         
         steps = np.arange(len(rewards_mean[0:SPAN]))
         axs[rewards_idx].set_title('Rewards', fontsize=18)
@@ -340,16 +398,24 @@ if __name__=='__main__':
         axs[regret_idx].fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
                         regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
                         alpha=0.3, label='_nolegend_')
+        #ax_cumvio.set_title('Cumulative SLA violations', fontsize=18)
+        ax_cumvio.plot(steps, regret_mean[0:SPAN], label = label, linewidth = 2, color=color_map[algo])
+        #axs[regret_idx].fill_between(steps, regret_min, regret_max, alpha=0.3, label='_nolegend_', color=color_map[algo]) # , color = '#DDDDDD'
+        ax_cumvio.fill_between(steps, regret_mean[0:SPAN] - 1.697 * regret_std[0:SPAN] / np.sqrt(runs), 
+                        regret_mean[0:SPAN] + 1.697 * regret_std[0:SPAN] / np.sqrt(runs), color = color_map[algo],
+                        alpha=0.3, label='_nolegend_')
         if algo == algo_names[-1]:
-            axs[regret_idx].set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
-            axs[regret_idx].set_ylabel('cumulative SLA violations', fontsize=18)
-            axs[regret_idx].set_ylim((0,40)) # 15000
-            axs[regret_idx].set_yticks(np.arange(0, 41, 5))
-            axs[regret_idx].set_xticks(np.arange(0, 10001, 2000))
-            axs[regret_idx].tick_params(axis='x', labelsize=18)
-            axs[regret_idx].tick_params(axis='y', labelsize=18)
-            axs[regret_idx].legend(loc='best', fontsize=18)
-            axs[regret_idx].grid() 
+            ax_cumvio.set_xlabel('Step', fontsize=18)  # Add an x-label to the axes.
+            ax_cumvio.set_ylabel('cumulative SLA violations', fontsize=18)
+            ax_cumvio.set_ylim((0,40)) # 15000
+            ax_cumvio.set_yticks(np.arange(0, 41, 5))
+            ax_cumvio.set_xticks(np.arange(0, 10001, 2000))
+            ax_cumvio.tick_params(axis='x', labelsize=18)
+            ax_cumvio.tick_params(axis='y', labelsize=18)
+            ax_cumvio.legend(loc='best', fontsize=18)
+            ax_cumvio.grid() 
+            fig_cumvio.tight_layout()
+            fig_cumvio.savefig(save_path.format(scenario)+'_cumvio', format='png', transparent=True, dpi=300.0)
 
         if has_ues:
             ue_steps = np.arange(len(ue_mean[0:SPAN]))
